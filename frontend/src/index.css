@@ -1,0 +1,267 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme {
+  --font-sans: "Be Vietnam Pro", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --color-primary: #38bdf8;
+  --color-primary-hover: #0ea5e9;
+  --color-bg: #f8fafc;
+  --color-text-main: #0f172a;
+  --color-text-muted: #64748b;
+  --color-surface: #ffffff;
+}
+
+body {
+  @apply bg-slate-50 dark:bg-[#070b14] text-slate-900 dark:text-slate-100 font-sans antialiased;
+}
+
+/* ---------- Reusable components ---------- */
+@layer components {
+  .card {
+    @apply bg-white dark:bg-[#111a2e] rounded-3xl border border-slate-100 dark:border-slate-800 shadow-sm text-slate-900 dark:text-slate-100;
+  }
+
+  .input {
+    @apply w-full bg-slate-50 dark:bg-[#1a2642] border border-slate-200 dark:border-slate-700 rounded-full py-2.5 px-4 text-sm text-slate-800 dark:text-slate-100 placeholder:text-slate-400 dark:placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-400/40 focus:border-sky-400 transition-colors disabled:opacity-60;
+  }
+
+  .label {
+    @apply block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5;
+  }
+
+  .btn,
+  .btn-primary,
+  .btn-success,
+  .btn-danger,
+  .btn-secondary,
+  .btn-ghost {
+    @apply inline-flex items-center justify-center gap-2 px-5 py-2.5 rounded-full text-sm font-semibold transition-all active:scale-[.98] disabled:opacity-60 disabled:cursor-not-allowed disabled:active:scale-100 select-none;
+  }
+
+  .btn-primary {
+    @apply bg-sky-400 hover:bg-sky-500 text-white shadow-md shadow-sky-400/25;
+  }
+
+  .btn-success {
+    @apply bg-emerald-500 hover:bg-emerald-600 text-white shadow-md shadow-emerald-500/25;
+  }
+
+  .btn-danger {
+    @apply bg-rose-500 hover:bg-rose-600 text-white shadow-md shadow-rose-500/20;
+  }
+
+  .btn-secondary {
+    @apply bg-white dark:bg-[#1a2642] border border-slate-200 dark:border-slate-700 text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800;
+  }
+
+  .btn-ghost {
+    @apply px-3 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800;
+  }
+
+  .icon-btn {
+    @apply inline-flex items-center justify-center p-2 rounded-full transition-colors text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800;
+  }
+
+  .chip {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-semibold;
+  }
+
+  .th {
+    @apply py-3.5 px-4 font-semibold border-b border-slate-100 dark:border-slate-800 text-slate-600 dark:text-slate-400 text-sm whitespace-nowrap;
+  }
+
+  .td {
+    @apply py-3.5 px-4 border-b border-slate-50 dark:border-slate-800/60 text-slate-800 dark:text-slate-200;
+  }
+
+  .skeleton {
+    @apply rounded-xl bg-slate-100 dark:bg-slate-800 relative overflow-hidden;
+  }
+
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(90deg, transparent, rgb(255 255 255 / .5), transparent);
+    animation: shimmer 1.4s infinite;
+  }
+}
+
+/* ---------- Animations ---------- */
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px) scale(.97);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    transform: scale(.95) translateY(6px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes drawer-in {
+  from {
+    transform: translateX(-100%);
+  }
+
+  to {
+    transform: none;
+  }
+}
+
+.animate-toast-in {
+  animation: toast-in .25s ease-out;
+}
+
+.animate-fade-in {
+  animation: fade-in .2s ease-out;
+}
+
+.animate-pop-in {
+  animation: pop-in .22s cubic-bezier(.2, .9, .3, 1.2);
+}
+
+.animate-slide-up {
+  animation: slide-up .35s ease-out both;
+}
+
+.animate-drawer-in {
+  animation: drawer-in .25s ease-out;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+input[type=number]::-webkit-inner-spin-button,
+input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type=number] {
+  -moz-appearance: textfield;
+}
+
+/* ---------- Dark mode ----------
+   Đảo thang màu slate + làm dịu các màu pastel để toàn bộ giao diện
+   tự chuyển sang tối mà không cần thêm class dark: vào từng phần tử. */
+html.dark {
+  color-scheme: dark;
+  --color-slate-50: #0b1220;
+  --color-slate-100: #1a2436;
+  --color-slate-200: #2a3548;
+  --color-slate-300: #3d4a60;
+  --color-slate-400: #6b7a90;
+  --color-slate-500: #94a3b8;
+  --color-slate-600: #b8c4d4;
+  --color-slate-700: #d5dde8;
+  --color-slate-800: #e8edf4;
+  --color-slate-900: #f5f7fa;
+
+  --color-sky-50: color-mix(in oklab, var(--color-sky-500) 14%, transparent);
+  --color-sky-100: color-mix(in oklab, var(--color-sky-500) 22%, transparent);
+  --color-emerald-50: color-mix(in oklab, var(--color-emerald-500) 14%, transparent);
+  --color-emerald-100: color-mix(in oklab, var(--color-emerald-500) 22%, transparent);
+  --color-rose-50: color-mix(in oklab, var(--color-rose-500) 14%, transparent);
+  --color-rose-100: color-mix(in oklab, var(--color-rose-500) 22%, transparent);
+  --color-red-50: color-mix(in oklab, var(--color-red-500) 14%, transparent);
+  --color-red-100: color-mix(in oklab, var(--color-red-500) 22%, transparent);
+  --color-amber-50: color-mix(in oklab, var(--color-amber-500) 14%, transparent);
+  --color-amber-100: color-mix(in oklab, var(--color-amber-500) 22%, transparent);
+  --color-orange-50: color-mix(in oklab, var(--color-orange-500) 14%, transparent);
+  --color-orange-100: color-mix(in oklab, var(--color-orange-500) 22%, transparent);
+  --color-violet-50: color-mix(in oklab, var(--color-violet-500) 14%, transparent);
+  --color-violet-100: color-mix(in oklab, var(--color-violet-500) 22%, transparent);
+  --color-indigo-50: color-mix(in oklab, var(--color-indigo-500) 14%, transparent);
+  --color-indigo-100: color-mix(in oklab, var(--color-indigo-500) 22%, transparent);
+
+  --color-sky-600: var(--color-sky-400);
+  --color-sky-700: var(--color-sky-300);
+  --color-emerald-600: var(--color-emerald-400);
+  --color-emerald-700: var(--color-emerald-300);
+  --color-rose-600: var(--color-rose-400);
+  --color-red-600: var(--color-red-400);
+  --color-amber-600: var(--color-amber-400);
+  --color-amber-700: var(--color-amber-300);
+  --color-orange-600: var(--color-orange-400);
+  --color-violet-600: var(--color-violet-400);
+  --color-indigo-600: var(--color-indigo-400);
+}
+
+/* Bề mặt trắng → nền thẻ tối (CSS ngoài layer nên ưu tiên hơn utilities) */
+html.dark .bg-white,
+html.dark .card,
+html.dark .btn-secondary {
+  background-color: #111a2b;
+}
+
+html.dark .bg-white\/80 {
+  background-color: rgb(17 26 43 / .8);
+}
+
+html.dark .bg-white\/60 {
+  background-color: rgb(17 26 43 / .6);
+}
+
+html.dark .border-white {
+  border-color: #1a2436;
+}
+
+html.dark .skeleton::after {
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / .06), transparent);
+}
+
+html.dark .shadow-sm,
+html.dark .shadow-md,
+html.dark .shadow-xl {
+  --tw-shadow-color: rgb(0 0 0 / .35);
+}
