@@ -1,0 +1,21 @@
+{
+  "name": "fastcart-pos",
+  "version": "1.0.0",
+  "description": "FastCart POS - Hệ Thống Quản Lý Bán Lẻ & Kho Hàng Thông Minh",
+  "scripts": {
+    "dev:backend": "cd backend && npm run dev",
+    "dev:frontend": "cd frontend && npm run dev",
+    "install:all": "cd backend && npm install && cd ../frontend && npm install"
+  },
+  "keywords": [
+    "pos",
+    "retail",
+    "inventory",
+    "barcode",
+    "vietqr",
+    "react",
+    "express"
+  ],
+  "author": "",
+  "license": "ISC"
+}

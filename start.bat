@@ -5,7 +5,7 @@ echo ========================================================
 echo.
 
 echo [1/2] Starting Backend Server...
-start "Backend - FastCart POS" cmd /k "cd backend && npx nodemon src/server.js"
+start "Backend - FastCart POS" cmd /k "cd backend && npm run dev"
 
 echo [2/2] Starting Frontend Server...
 start "Frontend - FastCart POS" cmd /k "cd frontend && npm run dev"
