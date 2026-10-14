@@ -12,8 +12,7 @@ const pickFields = (body) => ({
   shelfId: body.shelfId || null,
   importPrice: Math.max(toNumber(body.importPrice), 0),
   salePrice: Math.max(toNumber(body.salePrice), 0),
-  minStock: Math.max(parseInt(body.minStock) || 0, 0),
-  imageUrl: body.imageUrl || null
+  minStock: Math.max(parseInt(body.minStock) || 0, 0)
 });
 
 const ensureCategory = async (userId, categoryId) => {

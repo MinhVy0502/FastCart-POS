@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Search, ScanBarcode, FileText, Bell, ChevronDown, Menu, LogOut, 
   Settings, User as UserIcon, X, ShoppingCart, Truck, PackagePlus, 
@@ -160,8 +161,18 @@ const Header = ({ sidebarOpen, setSidebarOpen }) => {
                           className="px-4 py-2 hover:bg-slate-50 flex items-center justify-between cursor-pointer transition-colors"
                         >
                           <div>
-                            <p className="text-sm font-semibold text-slate-800">{p.name}</p>
-                            <p className="text-xs text-slate-400">SKU: {p.sku} · Kho: {p.currentStock}</p>
+                            <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{p.name}</p>
+                            <p className="text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1.5 flex-wrap">
+                              <span>SKU: {p.sku}</span>
+                              <span>·</span>
+                              <span>Kho: {p.currentStock}</span>
+                              {p.shelf && (
+                                <>
+                                  <span>·</span>
+                                  <span className="text-amber-600 dark:text-amber-400 font-medium">📍 {p.shelf.code ? `[${p.shelf.code}] ` : ''}{p.shelf.name}</span>
+                                </>
+                              )}
+                            </p>
                           </div>
                           <span className="text-xs font-bold text-sky-600">{formatCurrency(p.salePrice)}</span>
                         </div>
@@ -369,16 +380,16 @@ const Header = ({ sidebarOpen, setSidebarOpen }) => {
       )}
 
       {/* Global Scanner Action Modals */}
-      {scannedProduct && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-sm text-center relative shadow-2xl animate-pop-in">
-            <button onClick={() => setScannedProduct(null)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20}/></button>
-            <div className="w-16 h-16 bg-sky-100 text-sky-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+      {scannedProduct && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-[#151f33] rounded-3xl p-6 w-full max-w-sm text-center relative shadow-2xl border border-slate-100 dark:border-slate-800 animate-pop-in">
+            <button onClick={() => setScannedProduct(null)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X size={20}/></button>
+            <div className="w-16 h-16 bg-sky-100 dark:bg-sky-950/60 text-sky-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <ScanBarcode size={32} />
             </div>
-            <h3 className="text-lg font-bold text-slate-800 mb-1">Đã tìm thấy sản phẩm</h3>
-            <p className="text-slate-700 font-semibold mb-1">{scannedProduct.name}</p>
-            <p className="text-sm text-slate-400 mb-6">SKU: {scannedProduct.sku} · Tồn kho: <span className="font-bold text-slate-700">{scannedProduct.currentStock}</span></p>
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-1">Đã tìm thấy sản phẩm</h3>
+            <p className="text-slate-700 dark:text-slate-200 font-semibold mb-1">{scannedProduct.name}</p>
+            <p className="text-sm text-slate-400 mb-6">SKU: {scannedProduct.sku} · Tồn kho: <span className="font-bold text-slate-700 dark:text-slate-200">{scannedProduct.currentStock}</span></p>
             
             <div className="space-y-3">
               <button 
@@ -395,19 +406,20 @@ const Header = ({ sidebarOpen, setSidebarOpen }) => {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
 
-      {scannedSku && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-white rounded-3xl p-6 w-full max-w-sm text-center relative shadow-2xl animate-pop-in">
-            <button onClick={() => setScannedSku(null)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600"><X size={20}/></button>
-            <div className="w-16 h-16 bg-amber-100 text-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
+      {scannedSku && typeof document !== 'undefined' && createPortal(
+        <div className="fixed inset-0 z-[9999] bg-black/60 flex items-center justify-center p-4 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-[#151f33] rounded-3xl p-6 w-full max-w-sm text-center relative shadow-2xl border border-slate-100 dark:border-slate-800 animate-pop-in">
+            <button onClick={() => setScannedSku(null)} className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X size={20}/></button>
+            <div className="w-16 h-16 bg-amber-100 dark:bg-amber-950/60 text-amber-500 rounded-2xl flex items-center justify-center mx-auto mb-4">
               <PackagePlus size={32} />
             </div>
-            <h3 className="text-lg font-bold text-slate-800 mb-1">Sản phẩm mới!</h3>
+            <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 mb-1">Sản phẩm mới!</h3>
             <p className="text-slate-500 text-sm mb-3">Mã vạch này chưa có trong danh mục sản phẩm.</p>
-            <p className="text-sm font-mono font-bold text-slate-800 mb-6 bg-slate-100 py-2 rounded-xl">{scannedSku}</p>
+            <p className="text-sm font-mono font-bold text-slate-800 dark:text-slate-100 mb-6 bg-slate-100 dark:bg-slate-800 py-2 rounded-xl">{scannedSku}</p>
             
             <button 
               onClick={() => { setScannedSku(null); navigate(`/products?action=create&sku=${scannedSku}`); }}
@@ -416,7 +428,8 @@ const Header = ({ sidebarOpen, setSidebarOpen }) => {
               <Plus size={18} /> Tạo sản phẩm mới
             </button>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </header>
   );

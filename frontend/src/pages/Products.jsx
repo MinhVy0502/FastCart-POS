@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { 
   Package, Plus, Edit2, Trash2, X, AlertCircle, Search, 
-  Filter, Download, Upload, Barcode, Image as ImageIcon, CheckCircle2,
+  Filter, Download, Upload, Barcode, CheckCircle2,
   MapPin, Layers
 } from 'lucide-react';
 import api from '../services/api';
@@ -35,10 +35,9 @@ const Products = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({
-    sku: '', name: '', categoryId: '', shelfId: '', importPrice: 0, salePrice: 0, minStock: 10, imageUrl: ''
+    sku: '', name: '', categoryId: '', shelfId: '', importPrice: 0, salePrice: 0, minStock: 10
   });
   const [saving, setSaving] = useState(false);
-  const [uploadingImage, setUploadingImage] = useState(false);
 
   // Barcode Print Modal
   const [barcodeModalOpen, setBarcodeModalOpen] = useState(false);
@@ -112,36 +111,16 @@ const Products = () => {
         shelfId: product.shelfId || '',
         importPrice: Number(product.importPrice) || 0,
         salePrice: Number(product.salePrice) || 0,
-        minStock: product.minStock || 10,
-        imageUrl: product.imageUrl || ''
+        minStock: product.minStock || 10
       });
     } else {
       setEditingId(null);
-      setFormData({ sku: '', name: '', categoryId: '', shelfId: '', importPrice: 0, salePrice: 0, minStock: 10, imageUrl: '' });
+      setFormData({ sku: '', name: '', categoryId: '', shelfId: '', importPrice: 0, salePrice: 0, minStock: 10 });
     }
     setShowModal(true);
   };
 
   const closeModal = () => setShowModal(false);
-
-  const handleImageUpload = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const body = new FormData();
-    body.append('file', file);
-    try {
-      setUploadingImage(true);
-      const res = await api.post('/uploads/image', body, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      setFormData(prev => ({ ...prev, imageUrl: res.data.data.url }));
-      toast.success('Tải ảnh lên thành công');
-    } catch (err) {
-      toast.error(getErrorMessage(err, 'Tải ảnh thất bại'));
-    } finally {
-      setUploadingImage(false);
-    }
-  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -380,14 +359,10 @@ const Products = () => {
                         {p.sku}
                       </td>
                       <td className="td font-bold text-slate-800">
-                        <div className="flex items-center gap-3">
-                          {p.imageUrl ? (
-                            <img src={p.imageUrl} alt={p.name} className="w-9 h-9 rounded-xl object-cover border border-slate-200" />
-                          ) : (
-                            <div className="w-9 h-9 rounded-xl bg-slate-100 text-slate-400 flex items-center justify-center shrink-0">
-                              <Package size={18} />
-                            </div>
-                          )}
+                        <div className="flex items-center gap-2.5">
+                          <div className="w-8 h-8 rounded-xl bg-sky-50 dark:bg-sky-950/40 text-sky-500 flex items-center justify-center shrink-0">
+                            <Package size={17} />
+                          </div>
                           <span className="line-clamp-1">{p.name}</span>
                         </div>
                       </td>
@@ -555,33 +530,6 @@ const Products = () => {
                 value={formData.minStock}
                 onChange={(e) => setFormData({ ...formData, minStock: Number(e.target.value) || 0 })}
               />
-            </div>
-          </div>
-
-          {/* Image upload */}
-          <div>
-            <label className="label">Ảnh sản phẩm</label>
-            <div className="flex items-center gap-3">
-              {formData.imageUrl ? (
-                <img src={formData.imageUrl} alt="Preview" className="w-14 h-14 rounded-2xl object-cover border border-slate-200" />
-              ) : (
-                <div className="w-14 h-14 rounded-2xl bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-300">
-                  <ImageIcon size={22} />
-                </div>
-              )}
-              <label className="btn-secondary text-xs cursor-pointer">
-                <Upload size={14} /> {uploadingImage ? 'Đang tải...' : 'Chọn ảnh mới'}
-                <input type="file" accept="image/*" className="hidden" onChange={handleImageUpload} />
-              </label>
-              {formData.imageUrl && (
-                <button
-                  type="button"
-                  onClick={() => setFormData({ ...formData, imageUrl: '' })}
-                  className="text-xs text-rose-500 hover:underline"
-                >
-                  Xóa ảnh
-                </button>
-              )}
             </div>
           </div>
         </form>

@@ -1,6 +1,6 @@
 const express = require('express');
 const { Op } = require('sequelize');
-const { Product, Sale, Customer } = require('../models');
+const { Product, Sale, Customer, Shelf } = require('../models');
 const { protect } = require('../middlewares/auth.middleware');
 
 const router = express.Router();
@@ -17,7 +17,8 @@ router.get('/', async (req, res, next) => {
     const [products, sales, customers] = await Promise.all([
       Product.findAll({
         where: { userId, [Op.or]: [{ name: like }, { sku: like }] },
-        attributes: ['id', 'name', 'sku', 'salePrice', 'currentStock', 'imageUrl'],
+        attributes: ['id', 'name', 'sku', 'salePrice', 'currentStock', 'shelfId'],
+        include: [{ model: Shelf, as: 'shelf', attributes: ['id', 'name', 'code'] }],
         limit: 6
       }),
       Sale.findAll({

@@ -14,8 +14,8 @@ echo.
 echo ========================================================
 echo SYSTEM STARTED!
 echo.
-echo - On PC:     http://localhost:5173
-echo - On Mobile: http://192.168.110.67:5173
+echo - On PC:     https://localhost:5173
+echo - On Mobile: https://192.168.110.66:5173
 echo.
 echo (Please keep the two black windows open while using)
 echo ========================================================

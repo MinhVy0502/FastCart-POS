@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   ShoppingCart, Plus, Search, ArrowLeft, Trash2, CheckCircle, 
   Store, Calculator, Ticket, ScanLine, Printer, Ban, Eye, 
-  Calendar, UserPlus, CreditCard, Banknote, RefreshCw, X, MapPin
+  Calendar, UserPlus, CreditCard, Banknote, RefreshCw, X, MapPin, Layers
 } from 'lucide-react';
 import api from '../services/api';
 import CameraScanner from '../components/CameraScanner';
@@ -48,6 +48,8 @@ const Sales = () => {
   const [showScanner, setShowScanner] = useState(false);
   const [activeCategory, setActiveCategory] = useState('');
   const [categories, setCategories] = useState([]);
+  const [activeShelf, setActiveShelf] = useState('');
+  const [shelves, setShelves] = useState([]);
 
   // Detail Modal
   const [detailSale, setDetailSale] = useState(null);
@@ -82,14 +84,16 @@ const Sales = () => {
 
   const fetchProductsAndCustomers = async () => {
     try {
-      const [prodRes, custRes, catRes] = await Promise.all([
+      const [prodRes, custRes, catRes, shelfRes] = await Promise.all([
         api.get('/products?limit=1000'),
         api.get('/customers?limit=500'),
-        api.get('/categories')
+        api.get('/categories'),
+        api.get('/shelves')
       ]);
       setProducts(prodRes.data.data || []);
       setCustomers(custRes.data.data || []);
       setCategories(catRes.data.data || []);
+      setShelves(shelfRes.data.data || []);
     } catch (err) {
       console.error(err);
     }
@@ -164,6 +168,7 @@ const Sales = () => {
         productId: product.id,
         name: product.name,
         sku: product.sku,
+        shelf: product.shelf,
         maxStock: product.currentStock,
         quantity: 1,
         price: Number(product.salePrice) || 0
@@ -326,7 +331,8 @@ const Sales = () => {
       p.name.toLowerCase().includes(searchProduct.toLowerCase()) || 
       p.sku.toLowerCase().includes(searchProduct.toLowerCase());
     const matchesCat = !activeCategory || p.categoryId === activeCategory;
-    return matchesSearch && matchesCat;
+    const matchesShelf = !activeShelf || p.shelfId === activeShelf;
+    return matchesSearch && matchesCat && matchesShelf;
   });
 
   // ==========================================
@@ -393,12 +399,12 @@ const Sales = () => {
                     : 'bg-white dark:bg-[#151f33] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
                 }`}
               >
-                Tất cả ({products.length})
+                Tất cả ngành hàng ({products.length})
               </button>
               {categories.map(c => (
                 <button
                   key={c.id}
-                  onClick={() => setActiveCategory(c.id)}
+                  onClick={() => setActiveCategory(activeCategory === c.id ? '' : c.id)}
                   className={`px-4 py-1.5 rounded-full text-xs font-bold shrink-0 transition-all ${
                     activeCategory === c.id 
                       ? 'bg-sky-400 text-white shadow-sm shadow-sky-400/25' 
@@ -409,6 +415,38 @@ const Sales = () => {
                 </button>
               ))}
             </div>
+
+            {/* Shelf tabs / pills */}
+            {shelves.length > 0 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-hide shrink-0">
+                <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider flex items-center gap-1 shrink-0 pl-1 mr-0.5">
+                  <Layers size={13} className="text-amber-500" /> Kệ:
+                </span>
+                <button
+                  onClick={() => setActiveShelf('')}
+                  className={`px-3 py-1 rounded-full text-xs font-semibold shrink-0 transition-all ${
+                    !activeShelf 
+                      ? 'bg-amber-500 text-white shadow-sm shadow-amber-500/25' 
+                      : 'bg-white dark:bg-[#151f33] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  Tất cả kệ
+                </button>
+                {shelves.map(s => (
+                  <button
+                    key={s.id}
+                    onClick={() => setActiveShelf(activeShelf === s.id ? '' : s.id)}
+                    className={`px-3 py-1 rounded-full text-xs font-semibold shrink-0 transition-all flex items-center gap-1 ${
+                      activeShelf === s.id 
+                        ? 'bg-amber-500 text-white shadow-sm shadow-amber-500/25' 
+                        : 'bg-white dark:bg-[#151f33] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-800'
+                    }`}
+                  >
+                    <span>{s.code ? `[${s.code}] ` : ''}{s.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
 
             {/* Product Grid / Empty State */}
             <div className="flex-1 min-h-0 overflow-y-auto pr-1">
@@ -434,10 +472,10 @@ const Sales = () => {
                     <>
                       <h4 className="font-bold text-slate-800 dark:text-slate-100 text-base mb-1">Không tìm thấy sản phẩm phù hợp</h4>
                       <p className="text-xs text-slate-400 dark:text-slate-400 max-w-sm mb-4">
-                        Không có mặt hàng nào khớp với từ khóa &ldquo;{searchProduct}&rdquo; trong mục này.
+                        Không có mặt hàng nào khớp với bộ lọc hiện tại.
                       </p>
                       <button
-                        onClick={() => { setSearchProduct(''); setActiveCategory(''); }}
+                        onClick={() => { setSearchProduct(''); setActiveCategory(''); setActiveShelf(''); }}
                         className="btn-secondary text-xs py-2 px-4 rounded-full"
                       >
                         Xóa bộ lọc
@@ -458,8 +496,8 @@ const Sales = () => {
                         }`}
                       >
                         <div>
-                          <div className="flex justify-between items-start mb-1">
-                            <span className="text-[10px] font-mono text-slate-400 truncate max-w-[90px]">{p.sku}</span>
+                          <div className="flex justify-between items-start mb-1.5">
+                            <span className="text-[10px] font-mono font-semibold text-slate-400 dark:text-slate-500 truncate max-w-[90px]">{p.sku}</span>
                             <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
                               isOutOfStock ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-500' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
                             }`}>
@@ -467,16 +505,20 @@ const Sales = () => {
                             </span>
                           </div>
                           <h4 className="font-bold text-slate-800 dark:text-slate-100 text-xs sm:text-sm line-clamp-2 leading-snug">{p.name}</h4>
-                          {p.shelf && (
-                            <div className="mt-1 flex items-center gap-1 text-[10px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full w-fit max-w-full truncate" title={`Vị trí: ${p.shelf.name}`}>
-                              <MapPin size={10} className="shrink-0" />
+                          {p.shelf ? (
+                            <div className="mt-1.5 flex items-center gap-1 text-[10px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 border border-amber-200/60 dark:border-amber-800/60 px-2 py-0.5 rounded-full w-fit max-w-full truncate shadow-xs" title={`Vị trí: ${p.shelf.name}`}>
+                              <MapPin size={10} className="shrink-0 text-amber-500" />
                               <span className="truncate">{p.shelf.code ? `[${p.shelf.code}] ` : ''}{p.shelf.name}</span>
+                            </div>
+                          ) : (
+                            <div className="mt-1.5 flex items-center gap-1 text-[10px] text-slate-400 dark:text-slate-500 italic">
+                              Chưa xếp kệ
                             </div>
                           )}
                         </div>
-                        <div className="mt-3 pt-2 border-t border-slate-50 dark:border-slate-800 flex items-center justify-between">
-                          <span className="font-bold text-sky-500 text-xs sm:text-sm">{formatCurrency(p.salePrice)}</span>
-                          <span className="w-6 h-6 rounded-full bg-sky-50 dark:bg-sky-950/40 text-sky-500 flex items-center justify-center font-bold text-xs">
+                        <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
+                          <span className="font-extrabold text-sky-500 text-xs sm:text-sm">{formatCurrency(p.salePrice)}</span>
+                          <span className="w-6 h-6 rounded-full bg-sky-50 dark:bg-sky-950/40 text-sky-500 flex items-center justify-center font-bold text-xs hover:bg-sky-400 hover:text-white transition-colors">
                             +
                           </span>
                         </div>
@@ -518,7 +560,14 @@ const Sales = () => {
                   <div key={item.productId} className="py-2.5 flex items-center justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       <h5 className="font-bold text-slate-800 dark:text-slate-100 text-xs sm:text-sm truncate">{item.name}</h5>
-                      <p className="text-xs text-slate-400 font-mono">{formatCurrency(item.price)}</p>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-xs text-slate-400 font-mono">{formatCurrency(item.price)}</span>
+                        {item.shelf && (
+                          <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.2 rounded truncate max-w-[140px]" title={item.shelf.name}>
+                            📍 {item.shelf.code ? `[${item.shelf.code}] ` : ''}{item.shelf.name}
+                          </span>
+                        )}
+                      </div>
                     </div>
 
                     {/* Quantity -/+ buttons */}

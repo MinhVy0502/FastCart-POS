@@ -443,14 +443,10 @@ const Shelves = () => {
                         {p.sku}
                       </td>
                       <td className="td font-bold text-slate-800 dark:text-slate-100">
-                        <div className="flex items-center gap-2.5">
-                          {p.imageUrl ? (
-                            <img src={p.imageUrl} alt={p.name} className="w-7 h-7 rounded-lg object-cover border border-slate-200 dark:border-slate-700" />
-                          ) : (
-                            <div className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 text-slate-400 flex items-center justify-center shrink-0">
-                              <Package size={14} />
-                            </div>
-                          )}
+                        <div className="flex items-center gap-2">
+                          <div className="w-6 h-6 rounded-lg bg-sky-50 dark:bg-sky-950/40 text-sky-500 flex items-center justify-center shrink-0">
+                            <Package size={13} />
+                          </div>
                           <span className="line-clamp-1">{p.name}</span>
                         </div>
                       </td>

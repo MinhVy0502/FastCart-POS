@@ -32,7 +32,7 @@ exports.getOne = async (req, res, next) => {
         {
           model: Product,
           as: 'products',
-          attributes: ['id', 'sku', 'name', 'salePrice', 'currentStock', 'imageUrl']
+          attributes: ['id', 'sku', 'name', 'salePrice', 'currentStock', 'minStock']
         }
       ]
     });
