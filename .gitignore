@@ -22,10 +22,6 @@ dist/
 dist-ssr/
 build/
 
-# Uploads directory contents (preserve folder with .gitkeep)
-backend/uploads/*
-!backend/uploads/.gitkeep
-
 # Operating System & IDE
 .DS_Store
 Thumbs.db

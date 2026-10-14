@@ -4,7 +4,15 @@ const jwt = require('jsonwebtoken');
 
 const register = async (req, res, next) => {
   try {
-    const { email, password, name, phone } = req.body;
+    const { password, name, phone } = req.body;
+    const email = typeof req.body.email === 'string' ? req.body.email.trim() : '';
+
+    if (!email || typeof password !== 'string' || !name) {
+      return res.status(400).json({ success: false, message: 'Vui lòng nhập đầy đủ họ tên, email và mật khẩu' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ success: false, message: 'Mật khẩu phải có ít nhất 6 ký tự' });
+    }
 
     const existingUser = await User.findOne({ where: { email } });
     if (existingUser) {
@@ -38,7 +46,12 @@ const register = async (req, res, next) => {
 
 const login = async (req, res, next) => {
   try {
-    const { email, password } = req.body;
+    const { password } = req.body;
+    const email = typeof req.body.email === 'string' ? req.body.email.trim() : '';
+
+    if (!email || typeof password !== 'string' || !password) {
+      return res.status(400).json({ success: false, message: 'Vui lòng nhập email và mật khẩu' });
+    }
 
     const user = await User.findOne({ where: { email } });
     if (!user) {

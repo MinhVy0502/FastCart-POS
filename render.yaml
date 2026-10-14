@@ -1,0 +1,27 @@
+services:
+  - type: web
+    name: fastcart-pos-api
+    runtime: node
+    plan: free
+    region: singapore
+    rootDir: backend
+    buildCommand: npm ci
+    # Render gói free không có pre-deploy hook → chạy migrate ngay trước khi khởi động
+    startCommand: npm run start:prod
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: 22
+      - key: JWT_EXPIRES_IN
+        value: 7d
+      - key: JWT_SECRET
+        generateValue: true
+      # Dán chuỗi kết nối từ Neon (bản Direct, KHÔNG chọn "Pooled connection")
+      - key: DATABASE_URL
+        sync: false
+      # Domain frontend trên Vercel, ví dụ: https://fastcart-pos.vercel.app
+      - key: CORS_ORIGIN
+        sync: false

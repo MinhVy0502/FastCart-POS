@@ -18,10 +18,8 @@ module.exports = {
     logging: false
   },
   production: {
-    username: process.env.DB_USERNAME,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    host: process.env.DB_HOST,
+    // Neon / Render cung cấp 1 chuỗi kết nối duy nhất qua biến DATABASE_URL
+    use_env_variable: 'DATABASE_URL',
     dialect: 'postgres',
     logging: false,
     dialectOptions: {
@@ -29,6 +27,7 @@ module.exports = {
         require: true,
         rejectUnauthorized: false
       }
-    }
+    },
+    pool: { max: 5, min: 0, idle: 10000, acquire: 30000 }
   }
 };
