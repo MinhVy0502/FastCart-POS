@@ -111,7 +111,7 @@ npx sequelize-cli db:migrate
   npm run dev
   ```
 
-Truy cập hệ thống tại: `http://localhost:5173`
+Truy cập hệ thống tại: `https://fast-cart-pos.vercel.app/`
 
 ---
 
