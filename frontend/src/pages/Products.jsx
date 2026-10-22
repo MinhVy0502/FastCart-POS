@@ -35,7 +35,7 @@ const Products = () => {
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [formData, setFormData] = useState({
-    sku: '', name: '', categoryId: '', shelfId: '', importPrice: 0, salePrice: 0, minStock: 10
+    sku: '', name: '', categoryId: '', shelfId: '', importPrice: 0, salePrice: 0, wholesalePrice: 0, minStock: 10
   });
   const [saving, setSaving] = useState(false);
 
@@ -111,11 +111,12 @@ const Products = () => {
         shelfId: product.shelfId || '',
         importPrice: Number(product.importPrice) || 0,
         salePrice: Number(product.salePrice) || 0,
+        wholesalePrice: Number(product.wholesalePrice) || 0,
         minStock: product.minStock || 10
       });
     } else {
       setEditingId(null);
-      setFormData({ sku: '', name: '', categoryId: '', shelfId: '', importPrice: 0, salePrice: 0, minStock: 10 });
+      setFormData({ sku: '', name: '', categoryId: '', shelfId: '', importPrice: 0, salePrice: 0, wholesalePrice: 0, minStock: 10 });
     }
     setShowModal(true);
   };
@@ -178,7 +179,8 @@ const Products = () => {
       'Danh mục': p.category?.name || '',
       'Kệ hàng': p.shelf ? (p.shelf.code ? `[${p.shelf.code}] ${p.shelf.name}` : p.shelf.name) : '',
       'Giá nhập': Number(p.importPrice) || 0,
-      'Giá bán': Number(p.salePrice) || 0,
+      'Giá bán lẻ': Number(p.salePrice) || 0,
+      'Giá bán sỉ': Number(p.wholesalePrice) || 0,
       'Tồn kho': p.currentStock || 0,
       'Mức tối thiểu': p.minStock || 0
     }));
@@ -211,7 +213,8 @@ const Products = () => {
           name: r['Tên sản phẩm'] || r['Tên'] || r['name'] || '',
           category: r['Danh mục'] || r['category'] || '',
           importPrice: r['Giá nhập'] || r['importPrice'] || 0,
-          salePrice: r['Giá bán'] || r['salePrice'] || 0,
+          salePrice: r['Giá bán lẻ'] || r['Giá bán'] || r['salePrice'] || 0,
+          wholesalePrice: r['Giá bán sỉ'] || r['Giá sỉ'] || r['wholesalePrice'] || 0,
           currentStock: r['Tồn kho'] || r['currentStock'] || 0,
           minStock: r['Mức tối thiểu'] || r['minStock'] || 10
         }));
@@ -341,16 +344,14 @@ const Products = () => {
                   <th className="th">Tên sản phẩm</th>
                   <th className="th">Danh mục & Kệ</th>
                   <th className="th text-right">Giá nhập</th>
-                  <th className="th text-right">Giá bán</th>
-                  <th className="th text-center">Tỷ suất lãi</th>
+                  <th className="th text-right">Giá bán lẻ</th>
+                  <th className="th text-right">Giá bán sỉ</th>
                   <th className="th text-center">Tồn kho</th>
                   <th className="th text-right">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
                 {products.map((p) => {
-                  const profit = (Number(p.salePrice) || 0) - (Number(p.importPrice) || 0);
-                  const marginPercent = Number(p.importPrice) > 0 ? Math.round((profit / Number(p.importPrice)) * 100) : 0;
                   const isLowStock = p.currentStock <= p.minStock;
 
                   return (
@@ -384,13 +385,17 @@ const Products = () => {
                       <td className="td text-right text-slate-500 text-xs">
                         {formatCurrency(p.importPrice)}
                       </td>
-                      <td className="td text-right font-extrabold text-sky-600">
+                      <td className="td text-right font-bold text-sky-600">
                         {formatCurrency(p.salePrice)}
                       </td>
-                      <td className="td text-center">
-                        <span className={`text-xs font-bold ${marginPercent >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                          {marginPercent > 0 ? `+${marginPercent}%` : `${marginPercent}%`}
-                        </span>
+                      <td className="td text-right">
+                        {Number(p.wholesalePrice) > 0 ? (
+                          <span className="font-extrabold text-indigo-600">
+                            {formatCurrency(p.wholesalePrice)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-xs italic">Chưa đặt</span>
+                        )}
                       </td>
                       <td className="td text-center">
                         <span className={`chip font-bold ${isLowStock ? 'bg-rose-50 text-rose-600' : 'bg-emerald-50 text-emerald-600'}`}>
@@ -504,7 +509,7 @@ const Products = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <div>
               <label className="label">Giá nhập kho (Vốn)</label>
               <MoneyInput
@@ -514,10 +519,21 @@ const Products = () => {
             </div>
 
             <div>
-              <label className="label">Giá bán ra *</label>
+              <label className="label">Giá bán lẻ *</label>
               <MoneyInput
                 value={formData.salePrice}
                 onChange={(val) => setFormData({ ...formData, salePrice: val })}
+              />
+            </div>
+
+            <div>
+              <label className="label flex items-center justify-between">
+                <span>Giá bán sỉ</span>
+                <span className="text-[10px] text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.5 rounded">Đại lý</span>
+              </label>
+              <MoneyInput
+                value={formData.wholesalePrice}
+                onChange={(val) => setFormData({ ...formData, wholesalePrice: val })}
               />
             </div>
 

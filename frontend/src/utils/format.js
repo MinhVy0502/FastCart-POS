@@ -21,4 +21,4 @@ export const dateKey = (d = new Date()) => `${d.getFullYear()}-${pad(d.getMonth(
 export const getErrorMessage = (err, fallback = 'Có lỗi xảy ra') =>
   err?.response?.data?.message || (err?.message === 'Network Error' ? 'Không kết nối được máy chủ' : fallback);
 
-export const PAYMENT_LABELS = { CASH: 'Tiền mặt', TRANSFER: 'Chuyển khoản' };
+export const PAYMENT_LABELS = { CASH: 'Tiền mặt', TRANSFER: 'Chuyển khoản', DEBT: 'Ghi nợ' };

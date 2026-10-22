@@ -3,7 +3,8 @@ import * as XLSX from 'xlsx';
 import { 
   FileText, TrendingUp, DollarSign, ShoppingBag, 
   Calendar, Download, ArrowUpRight, ArrowDownRight, 
-  Users, Layers, CreditCard, AlertTriangle, RefreshCw 
+  Users, Layers, CreditCard, AlertTriangle, RefreshCw,
+  Store, Landmark, AlertCircle
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, 
@@ -97,7 +98,31 @@ const Reports = () => {
     ]);
     XLSX.utils.book_append_sheet(wb, summarySheet, 'Tổng quan');
 
-    // 2. Top sản phẩm
+    // 2. Kênh bán hàng (Bán lẻ vs Bỏ sỉ B2B)
+    if (data.channelBreakdown?.length) {
+      const channelSheet = XLSX.utils.json_to_sheet(data.channelBreakdown.map(ch => ({
+        'Kênh bán hàng': ch.channel === 'WHOLESALE' ? 'Đại lý / Bỏ sỉ (B2B)' : 'Khách mua lẻ (B2C)',
+        'Số đơn hàng': ch.orders,
+        'Doanh thu': ch.revenue,
+        'Lợi nhuận gộp': ch.profit
+      })));
+      XLSX.utils.book_append_sheet(wb, channelSheet, 'Kênh Bán hàng');
+    }
+
+    // 3. Sổ công nợ thị trường & Đại lý
+    if (data.debtOverview?.topDebtors?.length) {
+      const debtSheet = XLSX.utils.json_to_sheet(data.debtOverview.topDebtors.map(d => ({
+        'Tên khách hàng': d.name,
+        'Tên tiệm / Cửa hàng': d.storeName || '-',
+        'Số điện thoại': d.phone || 'Chưa có',
+        'Dư nợ hiện tại': d.currentDebt,
+        'Hạn mức nợ': d.debtLimit,
+        'Tình trạng': d.debtLimit > 0 && d.currentDebt > d.debtLimit ? 'Vượt hạn mức' : 'Trong hạn mức'
+      })));
+      XLSX.utils.book_append_sheet(wb, debtSheet, 'Sổ Công nợ Đại lý');
+    }
+
+    // 4. Top sản phẩm
     if (data.topProducts?.length) {
       const topSheet = XLSX.utils.json_to_sheet(data.topProducts.map(p => ({
         'Mã SKU': p.sku,
@@ -110,10 +135,11 @@ const Reports = () => {
       XLSX.utils.book_append_sheet(wb, topSheet, 'Top bán chạy');
     }
 
-    // 3. Top khách hàng
+    // 5. Top khách hàng
     if (data.topCustomers?.length) {
       const custSheet = XLSX.utils.json_to_sheet(data.topCustomers.map(c => ({
         'Tên khách hàng': c.name,
+        'Tên tiệm': c.storeName || '-',
         'Số điện thoại': c.phone || 'Chưa có',
         'Số đơn': c.orders,
         'Tổng chi tiêu': c.spent
@@ -125,13 +151,16 @@ const Reports = () => {
     toast.success('Đã xuất báo cáo Excel thành công!');
   };
 
+  const retailChannel = data?.channelBreakdown?.find(c => c.channel === 'RETAIL') || { orders: 0, revenue: 0, profit: 0 };
+  const wholesaleChannel = data?.channelBreakdown?.find(c => c.channel === 'WHOLESALE') || { orders: 0, revenue: 0, profit: 0 };
+
   return (
     <div className="space-y-6">
       <PageHeader
         icon={FileText}
         color="rose"
         title="Báo cáo & Thống kê kinh doanh"
-        subtitle="Phân tích doanh thu, giá vốn, lợi nhuận thực tế và hiệu quả bán hàng"
+        subtitle="Phân tích doanh thu, giá vốn, lợi nhuận bán lẻ & bỏ sỉ đại lý, cùng giám sát công nợ"
         actions={
           <button onClick={handleExportExcel} className="btn-secondary">
             <Download size={16} /> Xuất file Excel
@@ -139,22 +168,22 @@ const Reports = () => {
         }
       />
 
-      {/* Date Filter Bar */}
-      <div className="card p-4 sm:p-5 flex flex-col md:flex-row gap-3 justify-between items-center">
+      {/* Date Filter Toolbar */}
+      <div className="card p-4 flex flex-col md:flex-row justify-between items-center gap-4">
         {/* Preset buttons */}
-        <div className="flex bg-slate-100 p-1 rounded-2xl gap-1 w-full md:w-auto overflow-x-auto scrollbar-hide">
+        <div className="flex bg-slate-100 p-1 rounded-2xl w-full md:w-auto overflow-x-auto">
           {[
             { id: 'today', label: 'Hôm nay' },
             { id: '7days', label: '7 ngày qua' },
             { id: '30days', label: '30 ngày qua' },
             { id: 'month', label: 'Tháng này' },
-            { id: 'custom', label: 'Tùy chọn' }
+            { id: 'custom', label: 'Tùy chỉnh' }
           ].map(p => (
             <button
               key={p.id}
               onClick={() => setPreset(p.id)}
-              className={`py-1.5 px-3 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
-                preset === p.id ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition-all whitespace-nowrap ${
+                preset === p.id ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-800'
               }`}
             >
               {p.label}
@@ -162,34 +191,36 @@ const Reports = () => {
           ))}
         </div>
 
-        {/* Date inputs */}
-        <div className="flex items-center gap-2 w-full md:w-auto">
-          <input
-            type="date"
-            className="input py-1.5 px-3 text-xs flex-1 md:w-36"
-            value={fromDate}
-            onChange={(e) => { setFromDate(e.target.value); setPreset('custom'); }}
-          />
-          <span className="text-slate-400 text-xs">đến</span>
-          <input
-            type="date"
-            className="input py-1.5 px-3 text-xs flex-1 md:w-36"
-            value={toDate}
-            onChange={(e) => { setToDate(e.target.value); setPreset('custom'); }}
-          />
-          {preset === 'custom' && (
-            <button onClick={handleApplyCustomFilter} className="btn-primary py-1.5 px-3 text-xs">
-              Lọc
+        {/* Custom date range inputs */}
+        {preset === 'custom' && (
+          <div className="flex items-center gap-2 w-full md:w-auto">
+            <input
+              type="date"
+              className="input py-1.5 text-xs"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+            />
+            <span className="text-slate-400 text-xs">đến</span>
+            <input
+              type="date"
+              className="input py-1.5 text-xs"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+            />
+            <button onClick={handleApplyCustomFilter} className="btn-primary py-1.5 px-3 text-xs shrink-0">
+              Xem
             </button>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {loading ? (
-        <SkeletonRows rows={8} cols={4} />
-      ) : !data ? null : (
+        <SkeletonRows rows={6} cols={4} />
+      ) : !data ? (
+        <div className="card p-12 text-center text-slate-400">Không có dữ liệu báo cáo</div>
+      ) : (
         <div className="space-y-6">
-          {/* KPI Summary Cards */}
+          {/* 4 Summary Stat Cards */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             {/* Doanh thu */}
             <div className="card p-5 relative overflow-hidden">
@@ -240,6 +271,169 @@ const Reports = () => {
               <h3 className="text-2xl font-extrabold text-slate-800">{formatCurrency(data.summary.avgOrder)}</h3>
               <p className="text-xs text-slate-400 mt-1">Chi tiêu trung bình mỗi hóa đơn</p>
             </div>
+          </div>
+
+          {/* Phân Tách Kênh Bán Hàng: Bán Lẻ vs Bỏ Sỉ Đại Lý (B2B) */}
+          <div className="card p-6 space-y-4">
+            <h4 className="font-extrabold text-slate-800 text-base flex items-center justify-between">
+              <span className="flex items-center gap-2">
+                <Store size={19} className="text-indigo-600" /> Phân tích Kênh Bán Hàng: Bán lẻ vs Đại lý bỏ sỉ
+              </span>
+              <span className="text-xs text-slate-400 font-normal">So sánh hiệu quả theo phân loại khách hàng</span>
+            </h4>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Kênh Bán Lẻ */}
+              <div className="p-4 rounded-2xl bg-sky-50/50 border border-sky-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-sky-100 text-sky-600 flex items-center justify-center font-bold">
+                      <Users size={16} />
+                    </div>
+                    <div>
+                      <h5 className="font-bold text-slate-800 text-sm">Kênh Bán Lẻ (B2C)</h5>
+                      <p className="text-[11px] text-slate-400">Khách vãng lai, mua trực tiếp</p>
+                    </div>
+                  </div>
+                  <span className="chip bg-sky-100 text-sky-700 font-bold">{retailChannel.orders} đơn</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-sky-100/70">
+                  <div>
+                    <span className="text-[11px] text-slate-500">Doanh thu bán lẻ:</span>
+                    <p className="font-extrabold text-slate-800 text-base mt-0.5">{formatCurrency(retailChannel.revenue)}</p>
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-slate-500">Lợi nhuận gộp:</span>
+                    <p className="font-extrabold text-sky-600 text-base mt-0.5">{formatCurrency(retailChannel.profit)}</p>
+                  </div>
+                </div>
+              </div>
+
+              {/* Kênh Bỏ Sỉ Đại Lý */}
+              <div className="p-4 rounded-2xl bg-indigo-50/50 border border-indigo-100 space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold">
+                      <Store size={16} />
+                    </div>
+                    <div>
+                      <h5 className="font-bold text-slate-800 text-sm">Kênh Bỏ Sỉ Đại Lý (B2B)</h5>
+                      <p className="text-[11px] text-slate-400">Các tiệm tạp hóa, đối tác mua sỉ</p>
+                    </div>
+                  </div>
+                  <span className="chip bg-indigo-100 text-indigo-700 font-bold">{wholesaleChannel.orders} đơn</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 pt-2 border-t border-indigo-100/70">
+                  <div>
+                    <span className="text-[11px] text-slate-500">Doanh thu sỉ:</span>
+                    <p className="font-extrabold text-slate-800 text-base mt-0.5">{formatCurrency(wholesaleChannel.revenue)}</p>
+                  </div>
+                  <div>
+                    <span className="text-[11px] text-slate-500">Lợi nhuận gộp:</span>
+                    <p className="font-extrabold text-indigo-600 text-base mt-0.5">{formatCurrency(wholesaleChannel.profit)}</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Quản Trị Công Nợ Toàn Hệ Thống (B2B Debt Management) */}
+          <div className="card p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2">
+              <div>
+                <h4 className="font-extrabold text-slate-800 text-base flex items-center gap-2">
+                  <Landmark size={19} className="text-rose-500" /> Quản Trị & Giám Sát Công Nợ Thị Trường
+                </h4>
+                <p className="text-xs text-slate-400 mt-0.5">Theo dõi số nợ gối đầu của các tiệm tạp hóa và đại lý cấp dưới</p>
+              </div>
+            </div>
+
+            {/* 3 Metric Cards for Debt */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-4 bg-rose-50/70 border border-rose-100 rounded-2xl">
+                <span className="text-xs font-semibold text-rose-600">Tổng công nợ thị trường</span>
+                <h4 className="text-2xl font-black text-rose-700 mt-1">
+                  {formatCurrency(data.debtOverview?.totalDebt || 0)}
+                </h4>
+                <p className="text-[11px] text-rose-500 mt-0.5">Chưa thu hồi từ các khách hàng</p>
+              </div>
+
+              <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                <span className="text-xs font-semibold text-slate-500">Số đại lý / khách đang nợ</span>
+                <h4 className="text-2xl font-black text-slate-800 mt-1">
+                  {data.debtOverview?.indebtedCount || 0} tiệm
+                </h4>
+                <p className="text-[11px] text-slate-400 mt-0.5">Đang có dư nợ {'>'} 0</p>
+              </div>
+
+              <div className="p-4 bg-slate-50 border border-slate-100 rounded-2xl">
+                <span className="text-xs font-semibold text-slate-500">Tổng hạn mức nợ cấp phép</span>
+                <h4 className="text-2xl font-black text-slate-800 mt-1">
+                  {formatCurrency(data.debtOverview?.totalLimit || 0)}
+                </h4>
+                <p className="text-[11px] text-slate-400 mt-0.5">Tổng định mức nợ an toàn</p>
+              </div>
+            </div>
+
+            {/* Top Debtors Table */}
+            {(!data.debtOverview?.topDebtors || data.debtOverview.topDebtors.length === 0) ? (
+              <p className="text-xs text-slate-400 py-4 text-center">Tuyệt vời! Hiện không có đại lý nào có nợ xấu hoặc nợ đọng.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="border-b border-slate-100 text-slate-400 uppercase tracking-wider text-[11px]">
+                      <th className="py-2.5">Tên tiệm / Đại lý</th>
+                      <th className="py-2.5">Người đại diện & SĐT</th>
+                      <th className="py-2.5">Phân loại</th>
+                      <th className="py-2.5 text-right">Hạn mức</th>
+                      <th className="py-2.5 text-right">Dư nợ hiện tại</th>
+                      <th className="py-2.5 text-center">Tình trạng</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {data.debtOverview.topDebtors.map((d) => {
+                      const isExceeded = Number(d.debtLimit) > 0 && Number(d.currentDebt) > Number(d.debtLimit);
+                      return (
+                        <tr key={d.id} className="hover:bg-slate-50/70 transition-colors">
+                          <td className="py-2.5 font-bold text-slate-800">
+                            {d.storeName || d.name}
+                          </td>
+                          <td className="py-2.5 text-slate-600">
+                            <span>{d.name}</span>
+                            {d.phone && <span className="text-slate-400 ml-1.5 font-mono">({d.phone})</span>}
+                          </td>
+                          <td className="py-2.5">
+                            {d.customerType === 'WHOLESALE' ? (
+                              <span className="chip bg-indigo-50 text-indigo-600 font-bold">Đại lý</span>
+                            ) : (
+                              <span className="chip bg-slate-100 text-slate-600">Khách lẻ</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 text-right text-slate-500 font-medium">
+                            {Number(d.debtLimit) > 0 ? formatCurrency(d.debtLimit) : 'Không giới hạn'}
+                          </td>
+                          <td className="py-2.5 text-right font-black text-rose-600 text-sm">
+                            {formatCurrency(d.currentDebt)}
+                          </td>
+                          <td className="py-2.5 text-center">
+                            {isExceeded ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-700">
+                                <AlertTriangle size={11} /> Vượt hạn mức
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-600">
+                                An toàn
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
 
           {/* Revenue & Profit Area Chart */}
@@ -320,9 +514,9 @@ const Reports = () => {
             <div className="card p-5 space-y-4">
               <h4 className="font-bold text-slate-800 text-sm flex items-center justify-between">
                 <span className="flex items-center gap-2">
-                  <Users size={17} className="text-sky-500" /> Top 10 khách hàng chi tiêu nhiều nhất
+                  <Users size={17} className="text-sky-500" /> Top 10 khách hàng & đại lý lớn nhất
                 </span>
-                <span className="text-xs text-slate-400 font-normal">VIP</span>
+                <span className="text-xs text-slate-400 font-normal">VIP / Đối tác</span>
               </h4>
 
               {(!data.topCustomers || data.topCustomers.length === 0) ? (
@@ -332,7 +526,7 @@ const Reports = () => {
                   <table className="w-full text-left text-xs">
                     <thead>
                       <tr className="border-b border-slate-100 text-slate-400">
-                        <th className="py-2">Khách hàng</th>
+                        <th className="py-2">Khách hàng / Tiệm</th>
                         <th className="py-2 text-center">Số đơn</th>
                         <th className="py-2 text-right">Tổng chi tiêu</th>
                       </tr>
@@ -341,7 +535,9 @@ const Reports = () => {
                       {data.topCustomers.map((c, i) => (
                         <tr key={c.id}>
                           <td className="py-2.5">
-                            <span className="font-bold text-slate-700">{i + 1}. {c.name}</span>
+                            <span className="font-bold text-slate-700">
+                              {i + 1}. {c.storeName ? `${c.storeName} (${c.name})` : c.name}
+                            </span>
                             <p className="text-[10px] text-slate-400">{c.phone || 'Chưa có SĐT'}</p>
                           </td>
                           <td className="py-2.5 text-center font-bold text-sky-600">{c.orders} đơn</td>

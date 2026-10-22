@@ -3,7 +3,8 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   ShoppingCart, Plus, Search, ArrowLeft, Trash2, CheckCircle, 
   Store, Calculator, Ticket, ScanLine, Printer, Ban, Eye, 
-  Calendar, UserPlus, CreditCard, Banknote, RefreshCw, X, MapPin, Layers
+  Calendar, UserPlus, CreditCard, Banknote, RefreshCw, X, MapPin, Layers,
+  FileText, AlertTriangle, ChevronRight
 } from 'lucide-react';
 import api from '../services/api';
 import CameraScanner from '../components/CameraScanner';
@@ -11,7 +12,7 @@ import { useToast } from '../contexts/ToastContext';
 import { useStore } from '../contexts/StoreContext';
 import { PageHeader, Modal, MoneyInput, Pagination, EmptyState, SkeletonRows } from '../components/ui';
 import { formatCurrency, formatDate, PAYMENT_LABELS, getErrorMessage } from '../utils/format';
-import { printReceipt } from '../utils/print';
+import { printReceipt, printDeliveryNote } from '../utils/print';
 import { vietQrUrl } from '../constants/banks';
 
 const Sales = () => {
@@ -37,10 +38,11 @@ const Sales = () => {
   // POS State
   const [cart, setCart] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState('');
+  const [priceMode, setPriceMode] = useState('RETAIL'); // 'RETAIL' | 'WHOLESALE'
   const [discount, setDiscount] = useState(0);
   const [discountType, setDiscountType] = useState('amount'); // 'amount' | 'percent'
   const [discountPercent, setDiscountPercent] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState('CASH'); // 'CASH' | 'TRANSFER'
+  const [paymentMethod, setPaymentMethod] = useState('CASH'); // 'CASH' | 'TRANSFER' | 'DEBT'
   const [customerPaid, setCustomerPaid] = useState(0);
   const [note, setNote] = useState('');
   const [searchProduct, setSearchProduct] = useState('');
@@ -56,9 +58,20 @@ const Sales = () => {
   const [detailOpen, setDetailOpen] = useState(false);
   const [detailLoading, setDetailLoading] = useState(false);
 
+  // Success / Print Choice Modal
+  const [successModalOpen, setSuccessModalOpen] = useState(false);
+  const [completedSale, setCompletedSale] = useState(null);
+  const [completedWarning, setCompletedWarning] = useState(null);
+
   // Quick Customer Create Modal
   const [quickCustOpen, setQuickCustOpen] = useState(false);
-  const [quickCustForm, setQuickCustForm] = useState({ name: '', phone: '' });
+  const [quickCustForm, setQuickCustForm] = useState({
+    name: '',
+    customerType: 'RETAIL',
+    storeName: '',
+    phone: '',
+    debtLimit: 0
+  });
   const [quickCustSaving, setQuickCustSaving] = useState(false);
 
   const searchInputRef = useRef(null);
@@ -157,6 +170,11 @@ const Sales = () => {
       return toast.warning(`Sản phẩm "${product.name}" hiện đã hết hàng trong kho!`);
     }
 
+    const isWs = priceMode === 'WHOLESALE';
+    const effectivePrice = isWs && Number(product.wholesalePrice) > 0
+      ? Number(product.wholesalePrice)
+      : (Number(product.salePrice) || 0);
+
     const existing = cart.find(item => item.productId === product.id);
     if (existing) {
       if (existing.quantity >= product.currentStock) {
@@ -171,10 +189,45 @@ const Sales = () => {
         shelf: product.shelf,
         maxStock: product.currentStock,
         quantity: 1,
-        price: Number(product.salePrice) || 0
+        price: effectivePrice,
+        salePrice: Number(product.salePrice) || 0,
+        wholesalePrice: Number(product.wholesalePrice) || 0,
+        isWholesalePrice: isWs && Number(product.wholesalePrice) > 0
       }]);
     }
     setSearchProduct('');
+  };
+
+  const handleSelectCustomer = (customerId) => {
+    setSelectedCustomer(customerId);
+    const cust = customers.find(c => c.id === customerId);
+    if (cust?.customerType === 'WHOLESALE') {
+      setPriceMode('WHOLESALE');
+      setCart(prev => prev.map(item => {
+        const prod = products.find(p => p.id === item.productId);
+        const wsPrice = Number(prod?.wholesalePrice) > 0 ? Number(prod.wholesalePrice) : Number(item.salePrice || item.price);
+        return {
+          ...item,
+          price: wsPrice,
+          isWholesalePrice: Number(prod?.wholesalePrice) > 0
+        };
+      }));
+      toast.info(`Đã tự động áp dụng giá sỉ cho đại lý "${cust.storeName || cust.name}"`);
+    }
+  };
+
+  const handleTogglePriceMode = (mode) => {
+    setPriceMode(mode);
+    setCart(prev => prev.map(item => {
+      const prod = products.find(p => p.id === item.productId);
+      if (mode === 'WHOLESALE') {
+        const wsPrice = Number(prod?.wholesalePrice) > 0 ? Number(prod.wholesalePrice) : (item.salePrice || item.price);
+        return { ...item, price: wsPrice, isWholesalePrice: Number(prod?.wholesalePrice) > 0 };
+      } else {
+        const retailPrice = Number(prod?.salePrice) || item.salePrice || item.price;
+        return { ...item, price: retailPrice, isWholesalePrice: false };
+      }
+    }));
   };
 
   const updateCartQty = (id, delta) => {
@@ -214,15 +267,22 @@ const Sales = () => {
 
   // Auto-fill customerPaid when finalAmount changes if user hasn't typed a custom amount
   useEffect(() => {
-    if (paymentMethod === 'CASH') {
+    if (paymentMethod === 'CASH' || paymentMethod === 'TRANSFER') {
       setCustomerPaid(finalAmount);
+    } else if (paymentMethod === 'DEBT') {
+      setCustomerPaid(0);
     }
   }, [finalAmount, paymentMethod]);
 
   const handleCheckout = async () => {
     if (cart.length === 0) return toast.warning('Giỏ hàng đang trống!');
     if (calculatedDiscount > totalAmount) return toast.warning('Giảm giá không được lớn hơn tổng tiền!');
-    if (paymentMethod === 'CASH' && customerPaid < finalAmount) {
+
+    const unpaid = Math.max(0, finalAmount - customerPaid);
+    if ((paymentMethod === 'DEBT' || unpaid > 0) && !selectedCustomer) {
+      return toast.warning('Chỉ khách hàng / đại lý có lưu tên mới được mua nợ. Vui lòng chọn khách hàng!');
+    }
+    if (paymentMethod === 'CASH' && customerPaid < finalAmount && !selectedCustomer) {
       return toast.warning('Tiền khách đưa chưa đủ!');
     }
 
@@ -233,24 +293,24 @@ const Sales = () => {
         note,
         discount: calculatedDiscount,
         paymentMethod,
-        customerPaid: paymentMethod === 'CASH' ? customerPaid : finalAmount,
+        customerPaid: paymentMethod === 'DEBT' ? customerPaid : (paymentMethod === 'CASH' ? customerPaid : finalAmount),
         items: cart.map(i => ({ productId: i.productId, quantity: i.quantity, price: i.price }))
       });
 
       const newSale = res.data.data;
+      const custObj = customers.find(c => c.id === selectedCustomer);
+      const fullSale = {
+        ...newSale,
+        customer: custObj,
+        items: cart
+      };
+
       toast.success('Tạo hóa đơn thành công!');
 
-      // Tự động in hóa đơn nếu có cấu hình
-      try {
-        const fullSale = {
-          ...newSale,
-          customer: customers.find(c => c.id === selectedCustomer),
-          items: cart
-        };
-        printReceipt(fullSale, settings);
-      } catch (err) {
-        console.error('In hóa đơn lỗi:', err);
-      }
+      // Open print choice dialog
+      setCompletedSale(fullSale);
+      setCompletedWarning(res.data.debtWarning || null);
+      setSuccessModalOpen(true);
 
       // Reset POS
       setCart([]);
@@ -533,18 +593,43 @@ const Sales = () => {
           {/* RIGHT: Cart & Checkout Panel */}
           <div className="lg:w-5/12 card p-4 sm:p-5 flex flex-col min-h-0 bg-white dark:bg-[#151f33] border border-slate-100 dark:border-slate-800 shadow-md">
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 shrink-0">
-              <h3 className="font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2 text-sm sm:text-base">
-                <ShoppingCart size={18} className="text-emerald-500" />
-                Giỏ hàng ({cart.reduce((s, i) => s + i.quantity, 0)})
-              </h3>
-              {cart.length > 0 && (
-                <button 
-                  onClick={() => setCart([])} 
-                  className="text-xs text-rose-500 hover:underline font-semibold"
-                >
-                  Xóa tất cả
-                </button>
-              )}
+              <div>
+                <h3 className="font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2 text-sm sm:text-base">
+                  <ShoppingCart size={18} className="text-emerald-500" />
+                  Giỏ hàng ({cart.reduce((s, i) => s + i.quantity, 0)})
+                </h3>
+              </div>
+
+              <div className="flex items-center gap-2">
+                {/* Wholesale / Retail Price Mode Toggle */}
+                <div className="flex rounded-full bg-slate-100 dark:bg-slate-800 p-0.5 text-xs font-bold">
+                  <button
+                    type="button"
+                    onClick={() => handleTogglePriceMode('RETAIL')}
+                    className={`px-2.5 py-1 rounded-full transition-all ${priceMode === 'RETAIL' ? 'bg-white dark:bg-[#151f33] shadow-xs text-sky-600 font-extrabold' : 'text-slate-400 hover:text-slate-600'}`}
+                    title="Áp dụng giá bán lẻ"
+                  >
+                    Giá lẻ
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleTogglePriceMode('WHOLESALE')}
+                    className={`px-2.5 py-1 rounded-full transition-all flex items-center gap-1 ${priceMode === 'WHOLESALE' ? 'bg-indigo-600 shadow-xs text-white font-extrabold' : 'text-slate-400 hover:text-indigo-600'}`}
+                    title="Áp dụng giá bán sỉ cho đại lý"
+                  >
+                    <Store size={12} /> Giá sỉ (B2B)
+                  </button>
+                </div>
+
+                {cart.length > 0 && (
+                  <button 
+                    onClick={() => setCart([])} 
+                    className="text-xs text-rose-500 hover:underline font-semibold ml-1"
+                  >
+                    Xóa
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Cart Items List */}
@@ -562,6 +647,11 @@ const Sales = () => {
                       <h5 className="font-bold text-slate-800 dark:text-slate-100 text-xs sm:text-sm truncate">{item.name}</h5>
                       <div className="flex items-center gap-1.5 mt-0.5">
                         <span className="text-xs text-slate-400 font-mono">{formatCurrency(item.price)}</span>
+                        {item.isWholesalePrice && (
+                          <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40 px-1.5 py-0.2 rounded">
+                            Giá sỉ
+                          </span>
+                        )}
                         {item.shelf && (
                           <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.2 rounded truncate max-w-[140px]" title={item.shelf.name}>
                             📍 {item.shelf.code ? `[${item.shelf.code}] ` : ''}{item.shelf.name}
@@ -612,25 +702,48 @@ const Sales = () => {
             {/* Checkout Area */}
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800 space-y-2.5 shrink-0">
               {/* Customer Selector */}
-              <div className="flex gap-2">
-                <select
-                  className="input py-2 text-xs flex-1 rounded-full"
-                  value={selectedCustomer}
-                  onChange={(e) => setSelectedCustomer(e.target.value)}
-                >
-                  <option value="">Khách lẻ (Không lưu tên)</option>
-                  {customers.map(c => (
-                    <option key={c.id} value={c.id}>{c.name} {c.phone ? `(${c.phone})` : ''}</option>
-                  ))}
-                </select>
-                <button
-                  type="button"
-                  onClick={() => setQuickCustOpen(true)}
-                  className="btn-secondary py-2 px-3 text-xs shrink-0 rounded-full"
-                  title="Thêm nhanh khách hàng mới"
-                >
-                  <UserPlus size={16} />
-                </button>
+              <div className="space-y-1.5">
+                <div className="flex gap-2">
+                  <select
+                    className="input py-2 text-xs flex-1 rounded-full"
+                    value={selectedCustomer}
+                    onChange={(e) => handleSelectCustomer(e.target.value)}
+                  >
+                    <option value="">Khách lẻ (Không lưu tên)</option>
+                    {customers.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.customerType === 'WHOLESALE' ? '🏬 [Đại lý] ' : ''}
+                        {c.storeName ? `${c.storeName} (${c.name})` : c.name} {c.phone ? `– ${c.phone}` : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setQuickCustOpen(true)}
+                    className="btn-secondary py-2 px-3 text-xs shrink-0 rounded-full"
+                    title="Thêm nhanh khách hàng / Đại lý mới"
+                  >
+                    <UserPlus size={16} />
+                  </button>
+                </div>
+
+                {/* Selected customer debt badge */}
+                {(() => {
+                  const cust = customers.find(c => c.id === selectedCustomer);
+                  if (!cust) return null;
+                  const currentDebt = Number(cust.currentDebt) || 0;
+                  return (
+                    <div className="flex items-center justify-between text-[11px] px-2 text-slate-500">
+                      <span className="flex items-center gap-1 font-semibold text-indigo-600">
+                        {cust.customerType === 'WHOLESALE' ? <Store size={13} /> : null}
+                        {cust.storeName || cust.name}
+                      </span>
+                      <span>
+                        Dư nợ hiện tại: <b className={currentDebt > 0 ? 'text-rose-600' : 'text-slate-700'}>{formatCurrency(currentDebt)}</b>
+                      </span>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Discount inputs */}
@@ -670,28 +783,39 @@ const Sales = () => {
               </div>
 
               {/* Payment Method Selector */}
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
-                  onClick={() => setPaymentMethod('CASH')}
-                  className={`py-2 px-3 rounded-full border font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+                  onClick={() => { setPaymentMethod('CASH'); setCustomerPaid(finalAmount); }}
+                  className={`py-2 px-1.5 rounded-2xl border font-bold text-xs flex flex-col sm:flex-row items-center justify-center gap-1 transition-all ${
                     paymentMethod === 'CASH'
-                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shadow-sm'
+                      ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 shadow-sm ring-1 ring-emerald-200'
                       : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
                   }`}
                 >
-                  <Banknote size={16} /> Tiền mặt
+                  <Banknote size={15} /> Tiền mặt
                 </button>
                 <button
                   type="button"
-                  onClick={() => setPaymentMethod('TRANSFER')}
-                  className={`py-2 px-3 rounded-full border font-bold text-xs flex items-center justify-center gap-1.5 transition-all ${
+                  onClick={() => { setPaymentMethod('TRANSFER'); setCustomerPaid(finalAmount); }}
+                  className={`py-2 px-1.5 rounded-2xl border font-bold text-xs flex flex-col sm:flex-row items-center justify-center gap-1 transition-all ${
                     paymentMethod === 'TRANSFER'
-                      ? 'border-sky-500 bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 shadow-sm'
+                      ? 'border-sky-500 bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 shadow-sm ring-1 ring-sky-200'
                       : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
                   }`}
                 >
-                  <CreditCard size={16} /> Chuyển khoản (VietQR)
+                  <CreditCard size={15} /> Chuyển khoản
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setPaymentMethod('DEBT'); setCustomerPaid(0); }}
+                  className={`py-2 px-1.5 rounded-2xl border font-bold text-xs flex flex-col sm:flex-row items-center justify-center gap-1 transition-all ${
+                    paymentMethod === 'DEBT'
+                      ? 'border-rose-500 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-400 shadow-sm ring-1 ring-rose-200'
+                      : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800'
+                  }`}
+                >
+                  <Store size={15} /> Ghi nợ tiệm
                 </button>
               </div>
 
@@ -725,6 +849,66 @@ const Sales = () => {
                   </div>
                 </div>
               )}
+
+              {/* If Debt: Tender advance and warning calculation */}
+              {paymentMethod === 'DEBT' && (() => {
+                const currentCust = customers.find(c => c.id === selectedCustomer);
+                const remainingDebt = Math.max(0, finalAmount - customerPaid);
+                const currentDebt = Number(currentCust?.currentDebt) || 0;
+                const debtLimit = Number(currentCust?.debtLimit) || 0;
+                const newTotalDebt = currentDebt + remainingDebt;
+                const isExceeded = debtLimit > 0 && newTotalDebt > debtLimit;
+
+                return (
+                  <div className="bg-rose-50/60 dark:bg-rose-950/30 p-2.5 rounded-2xl space-y-2 border border-rose-200/70 dark:border-rose-900/50 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-semibold text-rose-700 dark:text-rose-400">Khách trả trước đợt này:</span>
+                      <MoneyInput
+                        className="input py-1 px-3 text-right font-bold w-36 text-sm"
+                        value={customerPaid}
+                        onChange={setCustomerPaid}
+                      />
+                    </div>
+                    {currentCust ? (
+                      <div className="space-y-1 pt-1.5 border-t border-rose-200/50 dark:border-rose-900/40">
+                        <div className="flex justify-between text-slate-600 dark:text-slate-300">
+                          <span>Nợ phát sinh đơn này:</span>
+                          <span className="font-bold text-rose-600 dark:text-rose-400">{formatCurrency(remainingDebt)}</span>
+                        </div>
+                        <div className="flex justify-between text-slate-500 dark:text-slate-400">
+                          <span>Dư nợ cũ của tiệm:</span>
+                          <span>{formatCurrency(currentDebt)}</span>
+                        </div>
+                        <div className="flex justify-between font-bold text-slate-800 dark:text-slate-100 pt-1 border-t border-rose-100 dark:border-rose-900/40">
+                          <span>Tổng nợ sau đơn:</span>
+                          <span className="text-rose-700 dark:text-rose-400 font-black">
+                            {formatCurrency(newTotalDebt)}
+                          </span>
+                        </div>
+                        {debtLimit > 0 && (
+                          <div className="pt-0.5">
+                            <div className="flex justify-between text-[11px] text-slate-400">
+                              <span>Hạn mức nợ cho phép:</span>
+                              <span>{formatCurrency(debtLimit)}</span>
+                            </div>
+                            {isExceeded && (
+                              <div className="mt-1.5 p-2 bg-amber-100 dark:bg-amber-950/50 border border-amber-300 dark:border-amber-800 rounded-xl text-amber-900 dark:text-amber-200 font-semibold flex items-start gap-1.5 text-[11px]">
+                                <AlertTriangle size={14} className="text-amber-600 shrink-0 mt-0.5" />
+                                <span>Lưu ý: Đơn hàng sẽ khiến công nợ vượt hạn mức {formatCurrency(debtLimit)}. Vẫn có thể xác nhận chốt đơn.</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    ) : (
+                      <div className="p-2 bg-rose-100 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 rounded-xl text-rose-800 dark:text-rose-300 font-semibold flex items-center gap-1.5">
+                        <AlertTriangle size={14} className="text-rose-600 shrink-0" />
+                        <span>Chưa chọn khách hàng! Vui lòng chọn hoặc thêm Đại lý / Khách hàng bên trên để ghi nợ.</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
 
               {/* Summary Totals */}
               <div className="space-y-1 text-xs pt-1">
@@ -777,7 +961,7 @@ const Sales = () => {
         <Modal
           open={quickCustOpen}
           onClose={() => setQuickCustOpen(false)}
-          title="Thêm nhanh khách hàng"
+          title="Thêm nhanh khách hàng / Đại lý"
           icon={<UserPlus size={18} className="text-sky-500" />}
           footer={
             <>
@@ -789,8 +973,24 @@ const Sales = () => {
           }
         >
           <form id="quick-cust-form" onSubmit={handleQuickCreateCustomer} className="space-y-4">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setQuickCustForm({ ...quickCustForm, customerType: 'RETAIL' })}
+                className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${quickCustForm.customerType === 'RETAIL' ? 'border-sky-500 bg-sky-50 text-sky-700 ring-1 ring-sky-200' : 'border-slate-200 text-slate-600'}`}
+              >
+                Khách lẻ
+              </button>
+              <button
+                type="button"
+                onClick={() => setQuickCustForm({ ...quickCustForm, customerType: 'WHOLESALE' })}
+                className={`py-2 px-3 rounded-xl border text-xs font-bold transition-all ${quickCustForm.customerType === 'WHOLESALE' ? 'border-indigo-500 bg-indigo-50 text-indigo-700 ring-1 ring-indigo-200' : 'border-slate-200 text-slate-600'}`}
+              >
+                Đại lý / Tiệm sỉ
+              </button>
+            </div>
             <div>
-              <label className="label">Tên khách hàng *</label>
+              <label className="label">Tên người đại diện / Khách hàng *</label>
               <input
                 type="text"
                 required
@@ -801,6 +1001,18 @@ const Sales = () => {
                 onChange={(e) => setQuickCustForm({ ...quickCustForm, name: e.target.value })}
               />
             </div>
+            {quickCustForm.customerType === 'WHOLESALE' && (
+              <div>
+                <label className="label">Tên cửa hàng / Tiệm tạp hóa</label>
+                <input
+                  type="text"
+                  className="input"
+                  placeholder="VD: Tạp hóa Hoàng Phát..."
+                  value={quickCustForm.storeName}
+                  onChange={(e) => setQuickCustForm({ ...quickCustForm, storeName: e.target.value })}
+                />
+              </div>
+            )}
             <div>
               <label className="label">Số điện thoại</label>
               <input
@@ -811,6 +1023,16 @@ const Sales = () => {
                 onChange={(e) => setQuickCustForm({ ...quickCustForm, phone: e.target.value })}
               />
             </div>
+            {quickCustForm.customerType === 'WHOLESALE' && (
+              <div>
+                <label className="label">Hạn mức nợ cho phép (VNĐ)</label>
+                <MoneyInput
+                  value={quickCustForm.debtLimit}
+                  onChange={(val) => setQuickCustForm({ ...quickCustForm, debtLimit: val })}
+                  placeholder="0 (Không giới hạn)"
+                />
+              </div>
+            )}
           </form>
         </Modal>
       </div>
@@ -993,10 +1215,18 @@ const Sales = () => {
               <div className="flex gap-2">
                 <button onClick={() => setDetailOpen(false)} className="btn-secondary">Đóng</button>
                 <button 
-                  onClick={() => printReceipt(detailSale, settings)} 
-                  className="btn-primary"
+                  onClick={() => printDeliveryNote(detailSale, settings)} 
+                  className="btn-secondary text-xs flex items-center gap-1.5 border-indigo-200 text-indigo-600 hover:bg-indigo-50"
+                  title="In Phiếu Giao Hàng A4/A5 cho đại lý"
                 >
-                  <Printer size={16} /> In hóa đơn
+                  <FileText size={16} /> Phiếu Giao Hàng (B2B)
+                </button>
+                <button 
+                  onClick={() => printReceipt(detailSale, settings)} 
+                  className="btn-primary text-xs flex items-center gap-1.5"
+                  title="In hóa đơn cuộn nhiệt K80"
+                >
+                  <Printer size={16} /> Bill K80
                 </button>
               </div>
             </div>
@@ -1016,6 +1246,9 @@ const Sales = () => {
               <div>
                 <span className="text-slate-400">Khách hàng:</span>
                 <p className="font-bold text-slate-700 dark:text-slate-200 mt-0.5">{detailSale.customer?.name || 'Khách lẻ'}</p>
+                {detailSale.customer?.storeName && (
+                  <p className="text-[11px] text-indigo-600 font-semibold">{detailSale.customer.storeName}</p>
+                )}
               </div>
               <div>
                 <span className="text-slate-400">Hình thức:</span>
@@ -1070,6 +1303,18 @@ const Sales = () => {
                 <span>Khách cần trả:</span>
                 <span className="text-emerald-500 text-lg">{formatCurrency(detailSale.finalAmount)}</span>
               </div>
+              {detailSale.customerPaid !== undefined && (
+                <div className="flex justify-between text-xs text-slate-500 pt-1">
+                  <span>Khách đã trả:</span>
+                  <span className="font-bold text-slate-700">{formatCurrency(detailSale.customerPaid)}</span>
+                </div>
+              )}
+              {Number(detailSale.finalAmount) > Number(detailSale.customerPaid || 0) && (
+                <div className="flex justify-between text-xs text-rose-600 font-bold pt-0.5">
+                  <span>Ghi nợ đơn này:</span>
+                  <span>{formatCurrency(Number(detailSale.finalAmount) - Number(detailSale.customerPaid || 0))}</span>
+                </div>
+              )}
             </div>
 
             {detailSale.note && (
@@ -1077,6 +1322,82 @@ const Sales = () => {
                 <span className="font-bold">Ghi chú:</span> {detailSale.note}
               </div>
             )}
+          </div>
+        )}
+      </Modal>
+
+      {/* Modal Hoàn tất Đơn hàng & Lựa chọn Mẫu In (Thermal Bill vs B2B Delivery Note) */}
+      <Modal
+        open={successModalOpen}
+        onClose={() => { setSuccessModalOpen(false); setCompletedSale(null); }}
+        title="Thanh toán đơn hàng thành công!"
+        icon={<CheckCircle size={22} className="text-emerald-500" />}
+        footer={
+          <button
+            onClick={() => { setSuccessModalOpen(false); setCompletedSale(null); }}
+            className="btn-primary w-full sm:w-auto"
+          >
+            Tạo đơn hàng mới (Đóng)
+          </button>
+        }
+      >
+        {completedSale && (
+          <div className="space-y-4">
+            <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-100 flex items-center justify-between">
+              <div>
+                <p className="text-xs text-emerald-600 font-semibold">Mã hóa đơn</p>
+                <p className="font-mono font-black text-lg text-emerald-800">{completedSale.code}</p>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Khách: <b>{completedSale.customer?.storeName ? `[${completedSale.customer.storeName}] ${completedSale.customer.name}` : (completedSale.customer?.name || 'Khách lẻ')}</b>
+                </p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs text-emerald-600 font-semibold">Tổng thanh toán</p>
+                <p className="font-black text-xl text-emerald-700">{formatCurrency(completedSale.finalAmount)}</p>
+                <span className="inline-block mt-1 chip bg-white text-emerald-700 font-bold border border-emerald-200">
+                  {PAYMENT_LABELS[completedSale.paymentMethod] || completedSale.paymentMethod}
+                </span>
+              </div>
+            </div>
+
+            {completedWarning && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-2xl flex items-start gap-2 text-xs text-amber-800">
+                <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold">Lưu ý: Công nợ vượt hạn mức</p>
+                  <p className="text-amber-700 mt-0.5">
+                    Đơn hàng ghi nợ khiến công nợ đạt {formatCurrency(completedWarning.balanceAfter)}, vượt hạn mức {formatCurrency(completedWarning.debtLimit)}.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Chọn mẫu in phiếu xuất:</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <button
+                type="button"
+                onClick={() => printReceipt(completedSale, settings)}
+                className="p-4 rounded-2xl border-2 border-slate-200 hover:border-sky-500 hover:bg-sky-50/50 flex flex-col items-center justify-center text-center transition-all group"
+              >
+                <div className="w-12 h-12 rounded-2xl bg-sky-100 text-sky-600 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                  <Printer size={24} />
+                </div>
+                <span className="font-bold text-sm text-slate-800">In Hóa đơn nhiệt K80</span>
+                <span className="text-xs text-slate-400 mt-0.5">Khổ cuộn 80mm cho quầy bán lẻ</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => printDeliveryNote(completedSale, settings)}
+                className="p-4 rounded-2xl border-2 border-indigo-200 hover:border-indigo-600 hover:bg-indigo-50/50 flex flex-col items-center justify-center text-center transition-all group"
+              >
+                <div className="w-12 h-12 rounded-2xl bg-indigo-100 text-indigo-600 flex items-center justify-center mb-2 group-hover:scale-110 transition-transform">
+                  <FileText size={24} />
+                </div>
+                <span className="font-bold text-sm text-indigo-900">In Phiếu Giao Hàng A4/A5</span>
+                <span className="text-xs text-indigo-500 mt-0.5">Kèm nợ cũ, nợ mới & chữ ký 3 bên</span>
+              </button>
+            </div>
           </div>
         )}
       </Modal>

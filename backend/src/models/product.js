@@ -16,6 +16,7 @@ module.exports = (sequelize, DataTypes) => {
     userId: { type: DataTypes.UUID, allowNull: true },
     importPrice: { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
     salePrice: { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
+    wholesalePrice: { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
     currentStock: { type: DataTypes.INTEGER, defaultValue: 0 },
     minStock: { type: DataTypes.INTEGER, defaultValue: 10 },
     imageUrl: { type: DataTypes.STRING, allowNull: true }

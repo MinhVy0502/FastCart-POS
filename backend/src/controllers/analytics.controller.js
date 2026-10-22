@@ -96,7 +96,7 @@ exports.getDashboardData = async (req, res, next) => {
     const thirtyDaysAgo = startOfDay(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 29));
     const end = endOfDay(now);
 
-    const [today, month, chartData, top, totalRevenue, totalCost, totalProducts, lowStockRow, recentSales] = await Promise.all([
+    const [today, month, chartData, top, totalRevenue, totalCost, totalProducts, lowStockRow, recentSales, debtRow] = await Promise.all([
       summarize(userId, todayStart, end),
       summarize(userId, monthStart, end),
       timeSeries(userId, sevenDaysAgo, end, 'day'),
@@ -109,8 +109,9 @@ exports.getDashboardData = async (req, res, next) => {
         where: { userId },
         limit: 6,
         order: [['createdAt', 'DESC']],
-        include: [{ model: Customer, as: 'customer', attributes: ['name'] }]
-      })
+        include: [{ model: Customer, as: 'customer', attributes: ['name', 'storeName', 'customerType'] }]
+      }),
+      query(`SELECT COALESCE(SUM("currentDebt"), 0) AS "totalDebt" FROM "Customers" WHERE "userId" = :userId`, { userId })
     ]);
 
     res.json({
@@ -120,7 +121,8 @@ exports.getDashboardData = async (req, res, next) => {
           revenue: num(totalRevenue),
           cost: num(totalCost),
           products: totalProducts,
-          lowStock: lowStockRow[0]?.count || 0
+          lowStock: lowStockRow[0]?.count || 0,
+          totalDebt: num(debtRow[0]?.totalDebt)
         },
         today,
         month,
@@ -145,7 +147,10 @@ exports.getReports = async (req, res, next) => {
     const days = Math.ceil((to - from) / 86400000);
     const unit = days > 92 ? 'month' : 'day';
 
-    const [summary, series, top, slow, customers, categories, payments, cancelled, purchaseRow] = await Promise.all([
+    const [
+      summary, series, top, slow, customers, categories, payments, cancelled, purchaseRow,
+      channelBreakdown, debtSummaryRow, topDebtors
+    ] = await Promise.all([
       summarize(userId, from, to),
       timeSeries(userId, from, to, unit),
       topProducts(userId, from, to, 10),
@@ -159,7 +164,7 @@ exports.getReports = async (req, res, next) => {
         GROUP BY p.id ORDER BY quantity ASC, p."currentStock" DESC LIMIT 10
       `, { userId, from, to }),
       query(`
-        SELECT c.id, c.name, c.phone, COUNT(s.id)::int AS orders, SUM(s."finalAmount") AS spent
+        SELECT c.id, c.name, c."storeName", c."customerType", c.phone, COUNT(s.id)::int AS orders, SUM(s."finalAmount") AS spent
         FROM "Sales" s JOIN "Customers" c ON c.id = s."customerId"
         WHERE s."userId" = :userId AND s.status = 'COMPLETED' AND s."createdAt" BETWEEN :from AND :to
         GROUP BY c.id ORDER BY spent DESC LIMIT 10
@@ -186,7 +191,33 @@ exports.getReports = async (req, res, next) => {
       query(`
         SELECT COUNT(*)::int AS count, COALESCE(SUM("totalAmount"), 0) AS amount
         FROM "Purchases" WHERE "userId" = :userId AND "createdAt" BETWEEN :from AND :to
-      `, { userId, from, to })
+      `, { userId, from, to }),
+      query(`
+        SELECT COALESCE(c."customerType", 'RETAIL') AS channel,
+               COUNT(s.id)::int AS orders,
+               COALESCE(SUM(s."finalAmount"), 0) AS revenue,
+               COALESCE(SUM(s."finalAmount" - COALESCE(cost.cogs, 0)), 0) AS profit
+        FROM "Sales" s
+        LEFT JOIN "Customers" c ON c.id = s."customerId"
+        LEFT JOIN (
+          SELECT si."saleId", SUM(si.quantity * si."costPrice") AS cogs
+          FROM "SaleItems" si GROUP BY si."saleId"
+        ) cost ON cost."saleId" = s.id
+        WHERE s."userId" = :userId AND s.status = 'COMPLETED' AND s."createdAt" BETWEEN :from AND :to
+        GROUP BY channel
+      `, { userId, from, to }),
+      query(`
+        SELECT COALESCE(SUM("currentDebt"), 0) AS "totalDebt",
+               COUNT(*) FILTER (WHERE "currentDebt" > 0)::int AS "indebtedCount",
+               COALESCE(SUM("debtLimit"), 0) AS "totalLimit"
+        FROM "Customers" WHERE "userId" = :userId
+      `, { userId }),
+      query(`
+        SELECT id, name, "storeName", "customerType", phone, "currentDebt", "debtLimit"
+        FROM "Customers"
+        WHERE "userId" = :userId AND "currentDebt" > 0
+        ORDER BY "currentDebt" DESC LIMIT 15
+      `, { userId })
     ]);
 
     res.json({
@@ -205,7 +236,23 @@ exports.getReports = async (req, res, next) => {
         slowProducts: slow,
         topCustomers: customers.map(c => ({ ...c, spent: num(c.spent) })),
         categories: categories.map(c => ({ ...c, revenue: num(c.revenue) })),
-        payments: payments.map(p => ({ ...p, amount: num(p.amount) }))
+        payments: payments.map(p => ({ ...p, amount: num(p.amount) })),
+        channelBreakdown: channelBreakdown.map(ch => ({
+          channel: ch.channel,
+          orders: num(ch.orders),
+          revenue: num(ch.revenue),
+          profit: num(ch.profit)
+        })),
+        debtOverview: {
+          totalDebt: num(debtSummaryRow[0]?.totalDebt),
+          indebtedCount: num(debtSummaryRow[0]?.indebtedCount),
+          totalLimit: num(debtSummaryRow[0]?.totalLimit),
+          topDebtors: topDebtors.map(d => ({
+            ...d,
+            currentDebt: num(d.currentDebt),
+            debtLimit: num(d.debtLimit)
+          }))
+        }
       }
     });
   } catch (err) { next(err); }

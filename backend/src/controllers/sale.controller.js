@@ -1,9 +1,9 @@
 const { Op } = require('sequelize');
-const { Sale, SaleItem, Product, InventoryTransaction, Customer, User, sequelize } = require('../models');
+const { Sale, SaleItem, Product, InventoryTransaction, Customer, User, DebtHistory, sequelize } = require('../models');
 const AppError = require('../utils/AppError');
 const { getPaging, buildPagination, dateRange, generateCode, toNumber } = require('../utils/query');
 
-const PAYMENT_METHODS = ['CASH', 'TRANSFER'];
+const PAYMENT_METHODS = ['CASH', 'TRANSFER', 'DEBT'];
 
 exports.getAll = async (req, res, next) => {
   try {
@@ -25,7 +25,7 @@ exports.getAll = async (req, res, next) => {
     const { count, rows } = await Sale.findAndCountAll({
       where,
       include: [
-        { model: Customer, as: 'customer', attributes: ['id', 'name', 'phone'] },
+        { model: Customer, as: 'customer', attributes: ['id', 'name', 'phone', 'storeName', 'customerType'] },
         { model: User, as: 'user', attributes: ['name'] }
       ],
       order: [['createdAt', 'DESC']],
@@ -43,12 +43,12 @@ exports.getOne = async (req, res, next) => {
     const sale = await Sale.findOne({
       where: { id: req.params.id, userId: req.user.id },
       include: [
-        { model: Customer, as: 'customer', attributes: ['id', 'name', 'phone', 'address'] },
+        { model: Customer, as: 'customer', attributes: ['id', 'name', 'phone', 'address', 'storeName', 'customerType', 'currentDebt', 'debtLimit'] },
         { model: User, as: 'user', attributes: ['name'] },
         {
           model: SaleItem,
           as: 'items',
-          include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'sku'] }]
+          include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'sku', 'wholesalePrice', 'salePrice'] }]
         }
       ]
     });
@@ -70,7 +70,11 @@ exports.create = async (req, res, next) => {
     // Khách hàng phải thuộc cửa hàng hiện tại
     let customer = null;
     if (customerId) {
-      customer = await Customer.findOne({ where: { id: customerId, userId: req.user.id }, transaction });
+      customer = await Customer.findOne({
+        where: { id: customerId, userId: req.user.id },
+        transaction,
+        lock: transaction.LOCK.UPDATE
+      });
       if (!customer) throw new AppError('Khách hàng không tồn tại');
     }
 
@@ -98,17 +102,52 @@ exports.create = async (req, res, next) => {
 
     if (discount > totalAmount) throw new AppError('Giảm giá không được lớn hơn tổng tiền');
     const finalAmount = totalAmount - discount;
-    const customerPaid = paymentMethod === 'CASH'
-      ? Math.max(toNumber(req.body.customerPaid, finalAmount), 0)
-      : finalAmount;
-    if (paymentMethod === 'CASH' && customerPaid < finalAmount) {
-      throw new AppError('Tiền khách đưa chưa đủ');
+
+    let customerPaid = 0;
+    if (paymentMethod === 'DEBT') {
+      customerPaid = Math.max(toNumber(req.body.customerPaid, 0), 0);
+      if (!customer) {
+        throw new AppError('Chỉ khách hàng/đại lý có trong danh bạ mới được mua nợ. Vui lòng chọn khách hàng!');
+      }
+    } else {
+      customerPaid = req.body.customerPaid !== undefined
+        ? Math.max(toNumber(req.body.customerPaid), 0)
+        : finalAmount;
+      if (customerPaid < finalAmount && !customer) {
+        throw new AppError('Khách lẻ phải thanh toán đủ tiền');
+      }
+    }
+
+    const unpaidAmount = Math.max(0, finalAmount - customerPaid);
+
+    let debtWarning = null;
+    if (unpaidAmount > 0 && customer) {
+      const currentDebt = toNumber(customer.currentDebt);
+      const debtLimit = toNumber(customer.debtLimit);
+      const balanceAfter = currentDebt + unpaidAmount;
+      if (debtLimit > 0 && balanceAfter > debtLimit) {
+        debtWarning = {
+          exceeded: true,
+          currentDebt,
+          debtLimit,
+          balanceAfter,
+          overAmount: balanceAfter - debtLimit
+        };
+      }
     }
 
     const code = generateCode('HD');
     const sale = await Sale.create({
-      code, customerId: customer ? customer.id : null, note, totalAmount, discount, finalAmount,
-      customerPaid, paymentMethod, status: 'COMPLETED', userId: req.user.id
+      code,
+      customerId: customer ? customer.id : null,
+      note,
+      totalAmount,
+      discount,
+      finalAmount,
+      customerPaid,
+      paymentMethod,
+      status: 'COMPLETED',
+      userId: req.user.id
     }, { transaction });
 
     for (const { product, quantity, price } of lines) {
@@ -132,11 +171,41 @@ exports.create = async (req, res, next) => {
     }
 
     if (customer) {
-      await customer.update({ totalSpent: toNumber(customer.totalSpent) + finalAmount }, { transaction });
+      const currentDebt = toNumber(customer.currentDebt);
+      const newTotalSpent = toNumber(customer.totalSpent) + finalAmount;
+
+      if (unpaidAmount > 0) {
+        const balanceAfter = currentDebt + unpaidAmount;
+        await DebtHistory.create({
+          customerId: customer.id,
+          userId: req.user.id,
+          type: 'INCREASE',
+          amount: unpaidAmount,
+          balanceBefore: currentDebt,
+          balanceAfter,
+          referenceCode: code,
+          paymentMethod,
+          note: `Mua nợ từ đơn hàng ${code}${customerPaid > 0 ? ` (Đã trả trước ${customerPaid.toLocaleString('vi-VN')}đ)` : ''}`
+        }, { transaction });
+
+        await customer.update({
+          totalSpent: newTotalSpent,
+          currentDebt: balanceAfter
+        }, { transaction });
+      } else {
+        await customer.update({
+          totalSpent: newTotalSpent
+        }, { transaction });
+      }
     }
 
     await transaction.commit();
-    res.status(201).json({ success: true, message: 'Tạo hóa đơn thành công', data: sale });
+    res.status(201).json({
+      success: true,
+      message: debtWarning ? 'Tạo hóa đơn thành công (Lưu ý: công nợ vượt hạn mức)' : 'Tạo hóa đơn thành công',
+      data: sale,
+      debtWarning
+    });
   } catch (err) {
     await transaction.rollback();
     next(err);
@@ -179,7 +248,25 @@ exports.cancel = async (req, res, next) => {
       const customer = await Customer.findOne({ where: { id: sale.customerId, userId: req.user.id }, transaction });
       if (customer) {
         const newTotal = Math.max(toNumber(customer.totalSpent) - toNumber(sale.finalAmount), 0);
-        await customer.update({ totalSpent: newTotal }, { transaction });
+        const unpaidForThisSale = Math.max(0, toNumber(sale.finalAmount) - toNumber(sale.customerPaid));
+
+        if (unpaidForThisSale > 0) {
+          const currentDebt = toNumber(customer.currentDebt);
+          const newDebt = Math.max(0, currentDebt - unpaidForThisSale);
+          await DebtHistory.create({
+            customerId: customer.id,
+            userId: req.user.id,
+            type: 'DECREASE',
+            amount: unpaidForThisSale,
+            balanceBefore: currentDebt,
+            balanceAfter: newDebt,
+            referenceCode: sale.code,
+            note: `Giảm nợ do hủy hóa đơn ${sale.code}${reason ? ` – ${reason}` : ''}`
+          }, { transaction });
+          await customer.update({ totalSpent: newTotal, currentDebt: newDebt }, { transaction });
+        } else {
+          await customer.update({ totalSpent: newTotal }, { transaction });
+        }
       }
     }
 

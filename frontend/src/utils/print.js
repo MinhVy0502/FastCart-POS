@@ -149,3 +149,139 @@ export const printBarcodeLabels = (labels, { layout = 'a4', showPrice = true, st
     .price { font-size: 12px; font-weight: bold; margin-top: .5mm; }
   </style></head><body><div class="grid">${cells}</div></body></html>`);
 };
+
+/** HTML Phiếu giao hàng kiêm xuất kho khổ A4/A5 (B2B cho đại lý / tiệm tạp hóa). */
+export const buildDeliveryNoteHtml = (sale, settings = {}) => {
+  const items = sale.items || [];
+  const customer = sale.customer || {};
+  const currentDebt = Number(customer.currentDebt || 0);
+  const unpaidForSale = Math.max(Number(sale.finalAmount || 0) - Number(sale.customerPaid || 0), 0);
+  const oldDebt = Math.max(currentDebt - unpaidForSale, 0);
+
+  const rows = items.map((it, i) => `
+    <tr>
+      <td class="c">${i + 1}</td>
+      <td class="mono">${esc(it.product?.sku || it.sku || '')}</td>
+      <td class="b">${esc(it.product?.name || it.name)}</td>
+      <td class="c">Cái</td>
+      <td class="c b">${it.quantity}</td>
+      <td class="r">${formatCurrency(it.price)}</td>
+      <td class="r b">${formatCurrency(it.quantity * it.price)}</td>
+    </tr>`).join('');
+
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Phieu_giao_hang_${esc(sale.code)}</title>
+  <style>
+    @page { size: A5 landscape; margin: 8mm; }
+    @media print {
+      body { margin: 0; }
+    }
+    * { box-sizing: border-box; }
+    body { font-family: 'Times New Roman', Times, serif; font-size: 13px; color: #000; line-height: 1.4; padding: 10px; }
+    .c { text-align: center; } .r { text-align: right; } .b { font-weight: bold; }
+    .mono { font-family: monospace; font-size: 12px; }
+    .header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px; }
+    .company { font-size: 14px; }
+    .company h2 { margin: 0 0 4px; font-size: 17px; text-transform: uppercase; }
+    .doc-title { text-align: center; margin: 10px 0; }
+    .doc-title h1 { margin: 0; font-size: 20px; text-transform: uppercase; letter-spacing: 0.5px; }
+    .doc-title p { margin: 2px 0 0; font-style: italic; font-size: 12px; }
+    .info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 20px; margin-bottom: 14px; font-size: 13px; }
+    table.data { width: 100%; border-collapse: collapse; margin-bottom: 12px; }
+    table.data th, table.data td { border: 1px solid #333; padding: 5px 7px; }
+    table.data th { background-color: #f2f2f2; font-weight: bold; text-align: center; }
+    .summary-box { display: flex; justify-content: space-between; gap: 20px; margin-bottom: 20px; }
+    .note-box { flex: 1; border: 1px dashed #666; padding: 8px 12px; border-radius: 4px; }
+    .calc-box { width: 330px; }
+    .calc-box table { width: 100%; border-collapse: collapse; }
+    .calc-box td { padding: 2px 0; }
+    .calc-box tr.highlight td { font-weight: bold; font-size: 14px; border-top: 1px solid #333; border-bottom: 1px solid #333; padding: 4px 0; }
+    .signatures { display: grid; grid-template-columns: repeat(3, 1fr); text-align: center; margin-top: 25px; page-break-inside: avoid; }
+    .sig-title { font-weight: bold; margin-bottom: 2px; }
+    .sig-sub { font-size: 11px; font-style: italic; color: #555; }
+    .sig-space { height: 60px; }
+  </style></head><body>
+    <div class="header">
+      <div class="company">
+        <h2>${esc(settings.storeName || 'CỬA HÀNG ĐẠI LÝ BÁN BUÔN & BÁN LẺ')}</h2>
+        <div>Địa chỉ: ${esc(settings.address || 'Chưa cập nhật địa chỉ')}</div>
+        <div>Điện thoại: ${esc(settings.phone || '')}</div>
+      </div>
+      <div style="text-align: right; font-size: 12px;">
+        <div class="b">Mã đơn: ${esc(sale.code)}</div>
+        <div>Ngày lập: ${formatDate(sale.createdAt || new Date())}</div>
+      </div>
+    </div>
+
+    <div class="doc-title">
+      <h1>PHIẾU GIAO HÀNG KIÊM XUẤT KHO</h1>
+      <p>(Khách hàng sỉ / Tiệm tạp hóa đối soát công nợ)</p>
+    </div>
+
+    <div class="info-grid">
+      <div><b>Khách hàng:</b> ${esc(customer.name || 'Khách lẻ')}</div>
+      <div><b>Tên tiệm tạp hóa:</b> ${esc(customer.storeName || customer.name || '-')}</div>
+      <div><b>Số điện thoại:</b> ${esc(customer.phone || 'Chưa có')}</div>
+      <div><b>Địa chỉ giao hàng:</b> ${esc(customer.address || 'Nhận tại quầy')}</div>
+    </div>
+
+    <table class="data">
+      <thead>
+        <tr>
+          <th style="width: 35px">STT</th>
+          <th style="width: 100px">Mã SKU</th>
+          <th>Tên hàng hóa / Sản phẩm</th>
+          <th style="width: 50px">ĐVT</th>
+          <th style="width: 55px">SL</th>
+          <th style="width: 100px">Đơn giá</th>
+          <th style="width: 110px">Thành tiền</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows}
+      </tbody>
+    </table>
+
+    <div class="summary-box">
+      <div class="note-box">
+        <b>Ghi chú giao hàng:</b>
+        <p style="margin: 4px 0 0; font-style: italic;">${esc(sale.note || 'Không có ghi chú thêm.')}</p>
+      </div>
+
+      <div class="calc-box">
+        <table>
+          <tr><td>Tổng tiền hàng:</td><td class="r b">${formatCurrency(sale.totalAmount)}</td></tr>
+          ${Number(sale.discount) > 0 ? `<tr><td>Chiết khấu giảm giá:</td><td class="r text-red">-${formatCurrency(sale.discount)}</td></tr>` : ''}
+          <tr class="highlight"><td>CỘNG TIỀN HÀNG:</td><td class="r">${formatCurrency(sale.finalAmount)}</td></tr>
+          <tr><td>Đã thanh toán (${PAYMENT_LABELS[sale.paymentMethod] || sale.paymentMethod}):</td><td class="r b">${formatCurrency(sale.customerPaid)}</td></tr>
+          <tr><td>Nợ phát sinh đơn này:</td><td class="r b" style="color: ${unpaidForSale > 0 ? '#b91c1c' : '#000'}">${formatCurrency(unpaidForSale)}</td></tr>
+          <tr><td>Dư nợ cũ của tiệm:</td><td class="r">${formatCurrency(oldDebt)}</td></tr>
+          <tr style="border-top: 2px solid #000; font-size: 15px; font-weight: bold; color: #b91c1c;">
+            <td>TỔNG NỢ HIỆN TẠI:</td><td class="r">${formatCurrency(currentDebt)}</td></tr>
+        </table>
+      </div>
+    </div>
+
+    <div class="signatures">
+      <div>
+        <div class="sig-title">Người Lập Phiếu</div>
+        <div class="sig-sub">(Ký, họ tên)</div>
+        <div class="sig-space"></div>
+        <div>${esc(sale.user?.name || '')}</div>
+      </div>
+      <div>
+        <div class="sig-title">Người Giao Hàng</div>
+        <div class="sig-sub">(Ký, họ tên)</div>
+        <div class="sig-space"></div>
+      </div>
+      <div>
+        <div class="sig-title">Đại Diện Tiệm / Khách Hàng</div>
+        <div class="sig-sub">(Ký, xác nhận nợ)</div>
+        <div class="sig-space"></div>
+        <div>${esc(customer.name || '')}</div>
+      </div>
+    </div>
+  </body></html>`;
+};
+
+export const printDeliveryNote = (sale, settings) => printHtml(buildDeliveryNoteHtml(sale, settings));
+

@@ -12,6 +12,7 @@ const pickFields = (body) => ({
   shelfId: body.shelfId || null,
   importPrice: Math.max(toNumber(body.importPrice), 0),
   salePrice: Math.max(toNumber(body.salePrice), 0),
+  wholesalePrice: Math.max(toNumber(body.wholesalePrice), 0),
   minStock: Math.max(parseInt(body.minStock) || 0, 0)
 });
 
@@ -183,6 +184,7 @@ exports.bulkImport = async (req, res, next) => {
         categoryId,
         importPrice: Math.max(toNumber(r.importPrice), 0),
         salePrice: Math.max(toNumber(r.salePrice), 0),
+        wholesalePrice: Math.max(toNumber(r.wholesalePrice), 0),
         minStock: Math.max(parseInt(r.minStock) || 10, 0)
       };
 
