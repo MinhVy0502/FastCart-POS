@@ -11,7 +11,7 @@ import CameraScanner from '../components/CameraScanner';
 import { useToast } from '../contexts/ToastContext';
 import { useStore } from '../contexts/StoreContext';
 import { PageHeader, Modal, MoneyInput, Pagination, EmptyState, SkeletonRows } from '../components/ui';
-import { formatCurrency, formatDate, PAYMENT_LABELS, getErrorMessage } from '../utils/format';
+import { formatCurrency, formatDate, formatStockBreakdown, PAYMENT_LABELS, getErrorMessage } from '../utils/format';
 import { printReceipt, printDeliveryNote } from '../utils/print';
 import { vietQrUrl } from '../constants/banks';
 
@@ -35,16 +35,47 @@ const Sales = () => {
   const [filterStatus, setFilterStatus] = useState('');
   const [page, setPage] = useState(1);
 
-  // POS State
-  const [cart, setCart] = useState([]);
-  const [selectedCustomer, setSelectedCustomer] = useState('');
-  const [priceMode, setPriceMode] = useState('RETAIL'); // 'RETAIL' | 'WHOLESALE'
-  const [discount, setDiscount] = useState(0);
-  const [discountType, setDiscountType] = useState('amount'); // 'amount' | 'percent'
-  const [discountPercent, setDiscountPercent] = useState(0);
-  const [paymentMethod, setPaymentMethod] = useState('CASH'); // 'CASH' | 'TRANSFER' | 'DEBT'
+  // Multi-tab Hold Bills (Lưu nháp nhiều hóa đơn cùng lúc tại quầy POS)
+  const POS_TABS_KEY = 'fastcart_pos_tabs_v1';
+  const createEmptyTab = (num = 1) => ({
+    id: `tab_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+    label: `Đơn ${num}`,
+    cart: [],
+    selectedCustomer: '',
+    priceMode: 'RETAIL',
+    discount: 0,
+    discountType: 'amount',
+    discountPercent: 0,
+    paymentMethod: 'CASH',
+    note: ''
+  });
+
+  const [posTabs, setPosTabs] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(POS_TABS_KEY));
+      if (Array.isArray(saved) && saved.length > 0) return saved;
+    } catch {}
+    return [createEmptyTab(1)];
+  });
+  const [activeTabId, setActiveTabId] = useState(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(POS_TABS_KEY));
+      if (Array.isArray(saved) && saved.length > 0) return saved[0].id;
+    } catch {}
+    return '';
+  });
+
+  // POS State (khởi tạo từ tab đầu tiên)
+  const initialTab = posTabs[0] || createEmptyTab(1);
+  const [cart, setCart] = useState(initialTab.cart || []);
+  const [selectedCustomer, setSelectedCustomer] = useState(initialTab.selectedCustomer || '');
+  const [priceMode, setPriceMode] = useState(initialTab.priceMode || 'RETAIL'); // 'RETAIL' | 'WHOLESALE'
+  const [discount, setDiscount] = useState(initialTab.discount || 0);
+  const [discountType, setDiscountType] = useState(initialTab.discountType || 'amount'); // 'amount' | 'percent'
+  const [discountPercent, setDiscountPercent] = useState(initialTab.discountPercent || 0);
+  const [paymentMethod, setPaymentMethod] = useState(initialTab.paymentMethod || 'CASH'); // 'CASH' | 'TRANSFER' | 'DEBT'
   const [customerPaid, setCustomerPaid] = useState(0);
-  const [note, setNote] = useState('');
+  const [note, setNote] = useState(initialTab.note || '');
   const [searchProduct, setSearchProduct] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [showScanner, setShowScanner] = useState(false);
@@ -52,6 +83,85 @@ const Sales = () => {
   const [categories, setCategories] = useState([]);
   const [activeShelf, setActiveShelf] = useState('');
   const [shelves, setShelves] = useState([]);
+
+  // Đảm bảo activeTabId luôn hợp lệ
+  useEffect(() => {
+    if (!activeTabId && posTabs.length > 0) {
+      setActiveTabId(posTabs[0].id);
+    }
+  }, [activeTabId, posTabs]);
+
+  // Tự động đồng bộ giỏ hàng hiện tại vào tab đang mở & lưu localStorage
+  useEffect(() => {
+    if (!activeTabId) return;
+    setPosTabs(prev => {
+      const updated = prev.map(t => t.id === activeTabId ? {
+        ...t,
+        cart,
+        selectedCustomer,
+        priceMode,
+        discount,
+        discountType,
+        discountPercent,
+        paymentMethod,
+        note
+      } : t);
+      try {
+        localStorage.setItem(POS_TABS_KEY, JSON.stringify(updated));
+      } catch {}
+      return updated;
+    });
+  }, [cart, selectedCustomer, priceMode, discount, discountType, discountPercent, paymentMethod, note, activeTabId]);
+
+  const loadTabState = (tab) => {
+    setCart(tab.cart || []);
+    setSelectedCustomer(tab.selectedCustomer || '');
+    setPriceMode(tab.priceMode || 'RETAIL');
+    setDiscount(tab.discount || 0);
+    setDiscountType(tab.discountType || 'amount');
+    setDiscountPercent(tab.discountPercent || 0);
+    setPaymentMethod(tab.paymentMethod || 'CASH');
+    setNote(tab.note || '');
+  };
+
+  const handleSwitchPosTab = (tabId) => {
+    if (tabId === activeTabId) return;
+    const target = posTabs.find(t => t.id === tabId);
+    if (!target) return;
+    setActiveTabId(tabId);
+    loadTabState(target);
+  };
+
+  const handleAddPosTab = () => {
+    if (posTabs.length >= 8) {
+      return toast.warning('Tối đa 8 hóa đơn chờ cùng lúc!');
+    }
+    const nextNum = posTabs.length + 1;
+    const newTab = createEmptyTab(nextNum);
+    const nextTabs = [...posTabs, newTab];
+    setPosTabs(nextTabs);
+    setActiveTabId(newTab.id);
+    loadTabState(newTab);
+  };
+
+  const handleClosePosTab = (tabId, e) => {
+    if (e) e.stopPropagation();
+    if (posTabs.length <= 1) {
+      // Nếu chỉ còn 1 tab thì xóa trắng giỏ hàng hiện tại
+      const fresh = { ...posTabs[0], label: 'Đơn 1', cart: [], selectedCustomer: '', priceMode: 'RETAIL', discount: 0, discountType: 'amount', discountPercent: 0, paymentMethod: 'CASH', note: '' };
+      setPosTabs([fresh]);
+      setActiveTabId(fresh.id);
+      loadTabState(fresh);
+      return;
+    }
+    const remaining = posTabs.filter(t => t.id !== tabId).map((t, idx) => ({ ...t, label: `Đơn ${idx + 1}` }));
+    setPosTabs(remaining);
+    if (tabId === activeTabId) {
+      const nextActive = remaining[remaining.length - 1];
+      setActiveTabId(nextActive.id);
+      loadTabState(nextActive);
+    }
+  };
 
   // Detail Modal
   const [detailSale, setDetailSale] = useState(null);
@@ -120,19 +230,25 @@ const Sales = () => {
     fetchProductsAndCustomers();
   }, []);
 
-  // Handle URL query parameters (e.g. ?mode=pos, ?action=add&sku=...)
+  // Handle URL query parameters (e.g. ?mode=pos, ?action=add&sku=..., ?search=...)
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const mode = params.get('mode');
     const action = params.get('action');
     const sku = params.get('sku');
+    const qSearch = params.get('search');
 
     if (mode === 'pos') {
       setView('pos');
+    } else if (qSearch !== null) {
+      setView('list');
+      setFilterSearch(qSearch);
+      setPage(1);
     }
 
     if (action === 'add' && sku && products.length > 0) {
-      const match = products.find(p => p.sku.toLowerCase() === sku.toLowerCase());
+      const q = sku.toLowerCase();
+      const match = products.find(p => p.sku.toLowerCase() === q || (p.barcode && p.barcode.toLowerCase() === q));
       if (match) {
         setView('pos');
         handleAddToCart(match);
@@ -165,37 +281,120 @@ const Sales = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [view, cart, submitting]);
 
-  const handleAddToCart = (product) => {
+  const handleAddToCart = (product, matchedUnit = null) => {
     if (product.currentStock <= 0) {
       return toast.warning(`Sản phẩm "${product.name}" hiện đã hết hàng trong kho!`);
     }
 
     const isWs = priceMode === 'WHOLESALE';
-    const effectivePrice = isWs && Number(product.wholesalePrice) > 0
-      ? Number(product.wholesalePrice)
-      : (Number(product.salePrice) || 0);
+    const factor = matchedUnit ? (Number(matchedUnit.conversionFactor) || 1) : 1;
+    const unitName = matchedUnit ? matchedUnit.unitName : (product.unit || 'Cái');
 
-    const existing = cart.find(item => item.productId === product.id);
+    // Effective price for this unit
+    let effectivePrice;
+    if (matchedUnit) {
+      effectivePrice = isWs && Number(matchedUnit.wholesalePrice) > 0
+        ? Number(matchedUnit.wholesalePrice)
+        : (Number(matchedUnit.salePrice) || 0);
+    } else {
+      effectivePrice = isWs && Number(product.wholesalePrice) > 0
+        ? Number(product.wholesalePrice)
+        : (Number(product.salePrice) || 0);
+    }
+
+    // Check if enough stock for at least 1 unit of this size
+    if (product.currentStock < factor) {
+      return toast.warning(`Không đủ tồn kho để bán theo "${unitName}" (Cần ${factor} ${product.unit || 'Cái'}, còn ${product.currentStock})`);
+    }
+
+    const existing = cart.find(item => item.productId === product.id && item.unitName === unitName);
     if (existing) {
-      if (existing.quantity >= product.currentStock) {
-        return toast.warning(`Chỉ còn ${product.currentStock} sản phẩm trong kho!`);
+      // Calculate total base quantity needed across all units of this product in cart
+      const totalBaseInCart = cart
+        .filter(item => item.productId === product.id)
+        .reduce((sum, item) => sum + (item.quantity * item.conversionFactor), 0);
+
+      if (totalBaseInCart + factor > product.currentStock) {
+        return toast.warning(`Chỉ còn ${product.currentStock} ${product.unit || 'Cái'} trong kho!`);
       }
-      setCart(cart.map(item => item.productId === product.id ? { ...item, quantity: item.quantity + 1 } : item));
+      setCart(cart.map(item => (item.productId === product.id && item.unitName === unitName) ? { ...item, quantity: item.quantity + 1 } : item));
     } else {
       setCart([...cart, {
         productId: product.id,
         name: product.name,
         sku: product.sku,
+        barcode: product.barcode,
+        baseUnit: product.unit || 'Cái',
+        unitName: unitName,
+        conversionFactor: factor,
+        units: product.units || [],
         shelf: product.shelf,
-        maxStock: product.currentStock,
+        maxStock: Math.floor(product.currentStock / factor),
         quantity: 1,
         price: effectivePrice,
-        salePrice: Number(product.salePrice) || 0,
-        wholesalePrice: Number(product.wholesalePrice) || 0,
-        isWholesalePrice: isWs && Number(product.wholesalePrice) > 0
+        salePrice: matchedUnit ? Number(matchedUnit.salePrice) : (Number(product.salePrice) || 0),
+        wholesalePrice: matchedUnit ? Number(matchedUnit.wholesalePrice) : (Number(product.wholesalePrice) || 0),
+        isWholesalePrice: isWs && (matchedUnit ? Number(matchedUnit.wholesalePrice) > 0 : Number(product.wholesalePrice) > 0)
       }]);
     }
     setSearchProduct('');
+  };
+
+  const handleChangeCartUnit = (productId, oldUnitName, targetUnitName) => {
+    if (oldUnitName === targetUnitName) return;
+    const prod = products.find(p => p.id === productId);
+    if (!prod) return;
+
+    setCart(prev => {
+      const currentItem = prev.find(i => i.productId === productId && i.unitName === oldUnitName);
+      if (!currentItem) return prev;
+
+      let factor = 1;
+      let unitName = prod.unit || 'Cái';
+      let salePrice = Number(prod.salePrice) || 0;
+      let wsPrice = Number(prod.wholesalePrice) || 0;
+
+      if (targetUnitName !== (prod.unit || 'Cái') && currentItem.units) {
+        const u = currentItem.units.find(x => x.unitName === targetUnitName);
+        if (u) {
+          factor = Number(u.conversionFactor) || 1;
+          unitName = u.unitName;
+          salePrice = Number(u.salePrice) || 0;
+          wsPrice = Number(u.wholesalePrice) || 0;
+        }
+      }
+
+      const isWs = priceMode === 'WHOLESALE';
+      const effectivePrice = isWs && wsPrice > 0 ? wsPrice : salePrice;
+      const maxPossibleQty = Math.max(Math.floor(prod.currentStock / factor), 1);
+
+      const existingTarget = prev.find(i => i.productId === productId && i.unitName === unitName);
+      if (existingTarget) {
+        const mergedQty = Math.min(existingTarget.quantity + currentItem.quantity, maxPossibleQty);
+        return prev
+          .filter(i => !(i.productId === productId && i.unitName === oldUnitName))
+          .map(i => (i.productId === productId && i.unitName === unitName)
+            ? { ...i, quantity: mergedQty, maxStock: maxPossibleQty }
+            : i
+          );
+      }
+
+      const newQty = Math.min(currentItem.quantity, maxPossibleQty);
+      return prev.map(item => {
+        if (item.productId !== productId || item.unitName !== oldUnitName) return item;
+        return {
+          ...item,
+          unitName,
+          conversionFactor: factor,
+          price: effectivePrice,
+          salePrice,
+          wholesalePrice: wsPrice,
+          isWholesalePrice: isWs && wsPrice > 0,
+          maxStock: maxPossibleQty,
+          quantity: newQty
+        };
+      });
+    });
   };
 
   const handleSelectCustomer = (customerId) => {
@@ -204,12 +403,11 @@ const Sales = () => {
     if (cust?.customerType === 'WHOLESALE') {
       setPriceMode('WHOLESALE');
       setCart(prev => prev.map(item => {
-        const prod = products.find(p => p.id === item.productId);
-        const wsPrice = Number(prod?.wholesalePrice) > 0 ? Number(prod.wholesalePrice) : Number(item.salePrice || item.price);
+        const wsPrice = Number(item.wholesalePrice) > 0 ? Number(item.wholesalePrice) : Number(item.salePrice || item.price);
         return {
           ...item,
           price: wsPrice,
-          isWholesalePrice: Number(prod?.wholesalePrice) > 0
+          isWholesalePrice: Number(item.wholesalePrice) > 0
         };
       }));
       toast.info(`Đã tự động áp dụng giá sỉ cho đại lý "${cust.storeName || cust.name}"`);
@@ -219,43 +417,51 @@ const Sales = () => {
   const handleTogglePriceMode = (mode) => {
     setPriceMode(mode);
     setCart(prev => prev.map(item => {
-      const prod = products.find(p => p.id === item.productId);
       if (mode === 'WHOLESALE') {
-        const wsPrice = Number(prod?.wholesalePrice) > 0 ? Number(prod.wholesalePrice) : (item.salePrice || item.price);
-        return { ...item, price: wsPrice, isWholesalePrice: Number(prod?.wholesalePrice) > 0 };
+        const wsPrice = Number(item.wholesalePrice) > 0 ? Number(item.wholesalePrice) : (item.salePrice || item.price);
+        return { ...item, price: wsPrice, isWholesalePrice: Number(item.wholesalePrice) > 0 };
       } else {
-        const retailPrice = Number(prod?.salePrice) || item.salePrice || item.price;
+        const retailPrice = Number(item.salePrice) || item.price;
         return { ...item, price: retailPrice, isWholesalePrice: false };
       }
     }));
   };
 
-  const updateCartQty = (id, delta) => {
-    const item = cart.find(i => i.productId === id);
+  const updateCartQty = (id, delta, unitName) => {
+    const item = cart.find(i => i.productId === id && (!unitName || i.unitName === unitName));
     if (!item) return;
     const newQty = item.quantity + delta;
     if (newQty <= 0) {
-      return removeCartItem(id);
+      return removeCartItem(id, item.unitName);
     }
-    if (newQty > item.maxStock) {
-      return toast.warning(`Chỉ còn ${item.maxStock} sản phẩm trong kho!`);
+    const prod = products.find(p => p.id === id);
+    const maxStock = prod ? Math.floor(prod.currentStock / item.conversionFactor) : item.maxStock;
+    if (newQty > maxStock) {
+      return toast.warning(`Chỉ còn đủ tồn kho cho ${maxStock} ${item.unitName}!`);
     }
-    setCart(cart.map(i => i.productId === id ? { ...i, quantity: newQty } : i));
+    setCart(cart.map(i => (i.productId === id && i.unitName === item.unitName) ? { ...i, quantity: newQty } : i));
   };
 
-  const setCartItemField = (id, field, val) => {
+  const setCartItemField = (id, field, val, unitName) => {
     const num = Number(val) || 0;
     if (field === 'quantity') {
-      const item = cart.find(i => i.productId === id);
-      if (num > item.maxStock) {
-        toast.warning(`Chỉ còn ${item.maxStock} sản phẩm trong kho!`);
+      const item = cart.find(i => i.productId === id && (!unitName || i.unitName === unitName));
+      if (!item) return;
+      const prod = products.find(p => p.id === id);
+      const maxStock = prod ? Math.floor(prod.currentStock / item.conversionFactor) : item.maxStock;
+      if (num > maxStock) {
+        toast.warning(`Chỉ còn đủ tồn kho cho ${maxStock} ${item.unitName}!`);
         return;
       }
+      setCart(cart.map(i => (i.productId === id && i.unitName === item.unitName) ? { ...i, quantity: num } : i));
+      return;
     }
-    setCart(cart.map(i => i.productId === id ? { ...i, [field]: num } : i));
+    setCart(cart.map(i => (i.productId === id && (!unitName || i.unitName === unitName)) ? { ...i, [field]: num } : i));
   };
 
-  const removeCartItem = (id) => setCart(cart.filter(item => item.productId !== id));
+  const removeCartItem = (id, unitName) => {
+    setCart(cart.filter(item => !(item.productId === id && (!unitName || item.unitName === unitName))));
+  };
 
   // Calculations
   const totalAmount = cart.reduce((sum, item) => sum + (item.quantity * item.price), 0);
@@ -294,7 +500,13 @@ const Sales = () => {
         discount: calculatedDiscount,
         paymentMethod,
         customerPaid: paymentMethod === 'DEBT' ? customerPaid : (paymentMethod === 'CASH' ? customerPaid : finalAmount),
-        items: cart.map(i => ({ productId: i.productId, quantity: i.quantity, price: i.price }))
+        items: cart.map(i => ({
+          productId: i.productId,
+          quantity: i.quantity,
+          price: i.price,
+          unitName: i.unitName,
+          conversionFactor: i.conversionFactor || 1
+        }))
       });
 
       const newSale = res.data.data;
@@ -312,13 +524,17 @@ const Sales = () => {
       setCompletedWarning(res.data.debtWarning || null);
       setSuccessModalOpen(true);
 
-      // Reset POS
-      setCart([]);
-      setNote('');
-      setDiscount(0);
-      setDiscountPercent(0);
-      setSelectedCustomer('');
-      setCustomerPaid(0);
+      // Reset current POS tab (hoặc đóng tab hiện tại nếu có nhiều đơn chờ)
+      if (posTabs.length > 1) {
+        handleClosePosTab(activeTabId);
+      } else {
+        setCart([]);
+        setNote('');
+        setDiscount(0);
+        setDiscountPercent(0);
+        setSelectedCustomer('');
+        setCustomerPaid(0);
+      }
 
       // Refresh list & products stock
       fetchSales();
@@ -386,10 +602,61 @@ const Sales = () => {
     }
   };
 
+  const handleScanCode = async (rawCode) => {
+    const q = rawCode.trim().toLowerCase();
+    if (!q) return;
+
+    // 1. Check in local products list (SKU, main Barcode, or secondary unit barcode)
+    let matchedProduct = null;
+    let matchedUnit = null;
+
+    for (const p of products) {
+      if (p.sku.toLowerCase() === q || (p.barcode && p.barcode.toLowerCase() === q)) {
+        matchedProduct = p;
+        break;
+      }
+      if (p.units && p.units.length > 0) {
+        const u = p.units.find(x => x.barcode && x.barcode.toLowerCase() === q);
+        if (u) {
+          matchedProduct = p;
+          matchedUnit = u;
+          break;
+        }
+      }
+    }
+
+    if (matchedProduct) {
+      handleAddToCart(matchedProduct, matchedUnit);
+      if (matchedUnit) {
+        toast.success(`Đã thêm ${matchedProduct.name} (${matchedUnit.unitName}) vào giỏ`);
+      }
+      return;
+    }
+
+    // 2. Query backend dual lookup endpoint if not found locally
+    try {
+      const res = await api.get(`/products/sku/${encodeURIComponent(rawCode.trim())}`);
+      if (res.data?.data) {
+        handleAddToCart(res.data.data, res.data.matchedUnit || null);
+        if (res.data.matchedUnit) {
+          toast.success(`Đã thêm ${res.data.data.name} (${res.data.matchedUnit.unitName}) vào giỏ`);
+        }
+        return;
+      }
+    } catch {
+      // not found
+    }
+
+    toast.warning(`Không tìm thấy sản phẩm với mã: ${rawCode}`);
+  };
+
   const filteredCatalog = products.filter(p => {
-    const matchesSearch = !searchProduct.trim() || 
-      p.name.toLowerCase().includes(searchProduct.toLowerCase()) || 
-      p.sku.toLowerCase().includes(searchProduct.toLowerCase());
+    const q = searchProduct.trim().toLowerCase();
+    const matchesSearch = !q || 
+      p.name.toLowerCase().includes(q) || 
+      p.sku.toLowerCase().includes(q) ||
+      (p.barcode && p.barcode.toLowerCase().includes(q)) ||
+      (p.units && p.units.some(u => (u.barcode && u.barcode.toLowerCase().includes(q)) || u.unitName.toLowerCase().includes(q)));
     const matchesCat = !activeCategory || p.categoryId === activeCategory;
     const matchesShelf = !activeShelf || p.shelfId === activeShelf;
     return matchesSearch && matchesCat && matchesShelf;
@@ -436,14 +703,13 @@ const Sales = () => {
               <input
                 ref={searchInputRef}
                 type="text"
-                placeholder="Tìm sản phẩm theo tên, mã SKU hoặc quét mã vạch (F2)..."
+                placeholder="Tìm sản phẩm theo tên, SKU hoặc quét mã vạch (F2)..."
                 className="input pl-11 py-2.5 text-sm bg-white dark:bg-[#151f33] shadow-sm"
                 value={searchProduct}
                 onChange={(e) => setSearchProduct(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && searchProduct.trim()) {
-                    const exact = products.find(p => p.sku.toLowerCase() === searchProduct.trim().toLowerCase());
-                    if (exact) handleAddToCart(exact);
+                    handleScanCode(searchProduct);
                   }
                 }}
               />
@@ -557,12 +823,22 @@ const Sales = () => {
                       >
                         <div>
                           <div className="flex justify-between items-start mb-1.5">
-                            <span className="text-[10px] font-mono font-semibold text-slate-400 dark:text-slate-500 truncate max-w-[90px]">{p.sku}</span>
-                            <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
-                              isOutOfStock ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-500' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
-                            }`}>
-                              {isOutOfStock ? 'Hết hàng' : `Kho: ${p.currentStock}`}
-                            </span>
+                            <div className="flex flex-col min-w-0 max-w-[100px]">
+                              <span className="text-[10px] font-mono font-semibold text-slate-400 dark:text-slate-500 truncate">{p.sku}</span>
+                              {p.barcode && <span className="text-[9px] font-mono text-sky-500 truncate">{p.barcode}</span>}
+                            </div>
+                            <div className="flex flex-col items-end gap-0.5">
+                              <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold ${
+                                isOutOfStock ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-500' : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400'
+                              }`}>
+                                {isOutOfStock ? 'Hết hàng' : `Kho: ${p.currentStock} ${p.unit || 'Cái'}`}
+                              </span>
+                              {!isOutOfStock && formatStockBreakdown(p.currentStock, p.unit, p.units) && (
+                                <span className="text-[9px] font-semibold text-sky-600 dark:text-sky-400">
+                                  ≈ {formatStockBreakdown(p.currentStock, p.unit, p.units)}
+                                </span>
+                              )}
+                            </div>
                           </div>
                           <h4 className="font-bold text-slate-800 dark:text-slate-100 text-xs sm:text-sm line-clamp-2 leading-snug">{p.name}</h4>
                           {p.shelf ? (
@@ -577,7 +853,15 @@ const Sales = () => {
                           )}
                         </div>
                         <div className="mt-3 pt-2 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between">
-                          <span className="font-extrabold text-sky-500 text-xs sm:text-sm">{formatCurrency(p.salePrice)}</span>
+                          <div className="flex items-baseline gap-1">
+                            <span className="font-extrabold text-sky-500 text-xs sm:text-sm">{formatCurrency(p.salePrice)}</span>
+                            <span className="text-[10px] text-slate-400">/{p.unit || 'Cái'}</span>
+                            {p.units && p.units.length > 0 && (
+                              <span className="text-[9px] font-bold text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/50 px-1.5 py-0.2 rounded ml-1" title={p.units.map(u => `${u.unitName} (x${u.conversionFactor})`).join(', ')}>
+                                +{p.units.length} ĐVT
+                              </span>
+                            )}
+                          </div>
                           <span className="w-6 h-6 rounded-full bg-sky-50 dark:bg-sky-950/40 text-sky-500 flex items-center justify-center font-bold text-xs hover:bg-sky-400 hover:text-white transition-colors">
                             +
                           </span>
@@ -592,6 +876,54 @@ const Sales = () => {
 
           {/* RIGHT: Cart & Checkout Panel */}
           <div className="lg:w-5/12 card p-4 sm:p-5 flex flex-col min-h-0 bg-white dark:bg-[#151f33] border border-slate-100 dark:border-slate-800 shadow-md">
+            {/* Multi-Tab Hold Bills Bar */}
+            <div className="flex items-center gap-1.5 overflow-x-auto pb-2.5 mb-2.5 border-b border-slate-100 dark:border-slate-800 scrollbar-hide shrink-0">
+              {posTabs.map((t) => {
+                const isActive = t.id === activeTabId;
+                const itemCount = (t.cart || []).reduce((s, i) => s + i.quantity, 0);
+                return (
+                  <div
+                    key={t.id}
+                    onClick={() => handleSwitchPosTab(t.id)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold cursor-pointer shrink-0 transition-all border ${
+                      isActive
+                        ? 'bg-sky-500 text-white border-sky-500 shadow-xs'
+                        : 'bg-slate-50 dark:bg-slate-800/70 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                    }`}
+                  >
+                    <span>{t.label}</span>
+                    {itemCount > 0 && (
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
+                        isActive ? 'bg-white text-sky-600' : 'bg-sky-100 dark:bg-sky-950 text-sky-600 dark:text-sky-400'
+                      }`}>
+                        {itemCount}
+                      </span>
+                    )}
+                    {(posTabs.length > 1 || itemCount > 0) && (
+                      <button
+                        type="button"
+                        onClick={(e) => handleClosePosTab(t.id, e)}
+                        className={`ml-0.5 rounded-full p-0.5 transition-colors ${
+                          isActive ? 'hover:bg-sky-600 text-white/90' : 'hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-400'
+                        }`}
+                        title={posTabs.length > 1 ? 'Đóng đơn chờ này' : 'Làm mới đơn'}
+                      >
+                        <X size={12} />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+              <button
+                type="button"
+                onClick={handleAddPosTab}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl text-xs font-bold text-sky-600 dark:text-sky-400 bg-sky-50 dark:bg-sky-950/50 hover:bg-sky-100 dark:hover:bg-sky-900/60 border border-dashed border-sky-300 dark:border-sky-700 shrink-0 transition-colors"
+                title="Tạo thêm hóa đơn chờ mới (Giữ đơn hiện tại)"
+              >
+                <Plus size={13} /> Đơn chờ
+              </button>
+            </div>
+
             <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800 shrink-0">
               <div>
                 <h3 className="font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-2 text-sm sm:text-base">
@@ -641,19 +973,42 @@ const Sales = () => {
                   <p className="text-xs text-slate-400 dark:text-slate-500 mt-1">Chọn từ danh mục bên trái hoặc quét mã vạch</p>
                 </div>
               ) : (
-                cart.map((item) => (
-                  <div key={item.productId} className="py-2.5 flex items-center justify-between gap-2">
+                cart.map((item, cartIdx) => (
+                  <div key={`${item.productId}-${item.unitName || item.unit}-${cartIdx}`} className="py-2.5 flex items-center justify-between gap-2">
                     <div className="flex-1 min-w-0">
                       <h5 className="font-bold text-slate-800 dark:text-slate-100 text-xs sm:text-sm truncate">{item.name}</h5>
-                      <div className="flex items-center gap-1.5 mt-0.5">
-                        <span className="text-xs text-slate-400 font-mono">{formatCurrency(item.price)}</span>
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        {/* Unit selector if product has secondary units */}
+                        {item.units && item.units.length > 0 ? (
+                          <select
+                            className="bg-slate-100 dark:bg-slate-800 text-[11px] font-bold text-sky-600 dark:text-sky-400 rounded-lg border border-slate-200 dark:border-slate-700 py-0.5 px-1.5 focus:outline-none"
+                            value={item.unitName}
+                            onChange={(e) => handleChangeCartUnit(item.productId, item.unitName, e.target.value)}
+                          >
+                            <option value={item.baseUnit}>{item.baseUnit} (Gốc)</option>
+                            {item.units.map(u => (
+                              <option key={u.id || u.unitName} value={u.unitName}>
+                                {u.unitName} (x{u.conversionFactor})
+                              </option>
+                            ))}
+                          </select>
+                        ) : (
+                          <span className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-1.5 py-0.2 rounded">
+                            {item.unitName || item.unit || 'Cái'}
+                          </span>
+                        )}
+
+                        <span className="text-xs text-slate-400 font-mono">
+                          {formatCurrency(item.price)}
+                        </span>
+
                         {item.isWholesalePrice && (
                           <span className="text-[10px] font-bold text-indigo-600 bg-indigo-50 dark:bg-indigo-950/40 px-1.5 py-0.2 rounded">
                             Giá sỉ
                           </span>
                         )}
                         {item.shelf && (
-                          <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.2 rounded truncate max-w-[140px]" title={item.shelf.name}>
+                          <span className="text-[10px] font-semibold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.2 rounded truncate max-w-[130px]" title={item.shelf.name}>
                             📍 {item.shelf.code ? `[${item.shelf.code}] ` : ''}{item.shelf.name}
                           </span>
                         )}
@@ -663,7 +1018,7 @@ const Sales = () => {
                     {/* Quantity -/+ buttons */}
                     <div className="flex items-center gap-1 shrink-0">
                       <button 
-                        onClick={() => updateCartQty(item.productId, -1)}
+                        onClick={() => updateCartQty(item.productId, -1, item.unitName)}
                         className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold text-sm"
                       >
                         -
@@ -674,14 +1029,15 @@ const Sales = () => {
                         max={item.maxStock}
                         className="w-10 text-center font-bold text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-800 dark:text-slate-100 rounded-lg py-1"
                         value={item.quantity}
-                        onChange={(e) => setCartItemField(item.productId, 'quantity', e.target.value)}
+                        onChange={(e) => setCartItemField(item.productId, 'quantity', e.target.value, item.unitName)}
                       />
                       <button 
-                        onClick={() => updateCartQty(item.productId, 1)}
+                        onClick={() => updateCartQty(item.productId, 1, item.unitName)}
                         className="w-7 h-7 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold text-sm"
                       >
                         +
                       </button>
+                      <span className="text-[11px] font-medium text-slate-400 min-w-[20px]">{item.unitName || item.unit || 'Cái'}</span>
                     </div>
 
                     <div className="w-24 text-right font-bold text-slate-800 dark:text-slate-100 text-xs sm:text-sm shrink-0">
@@ -689,7 +1045,7 @@ const Sales = () => {
                     </div>
 
                     <button 
-                      onClick={() => removeCartItem(item.productId)}
+                      onClick={() => removeCartItem(item.productId, item.unitName)}
                       className="text-slate-300 dark:text-slate-600 hover:text-rose-500 p-1"
                     >
                       <Trash2 size={16} />
@@ -945,13 +1301,7 @@ const Sales = () => {
         {showScanner && (
           <CameraScanner
             onScan={(code) => {
-              const exact = products.find(p => p.sku.toLowerCase() === code.trim().toLowerCase());
-              if (exact) {
-                handleAddToCart(exact);
-                toast.success(`Đã thêm ${exact.name} vào giỏ`);
-              } else {
-                toast.warning(`Không tìm thấy sản phẩm với mã: ${code}`);
-              }
+              handleScanCode(code);
             }}
             onClose={() => setShowScanner(false)}
           />
@@ -1277,10 +1627,17 @@ const Sales = () => {
                   <tr key={it.id}>
                     <td className="py-2.5">
                       <p className="font-bold text-slate-800 dark:text-slate-100">{it.product?.name}</p>
-                      <p className="text-xs text-slate-400">{it.product?.sku}</p>
+                      <p className="text-xs text-slate-400 font-mono">
+                        {it.product?.sku}
+                        {it.product?.barcode && <span className="ml-1 text-sky-500">· {it.product.barcode}</span>}
+                      </p>
                     </td>
-                    <td className="py-2.5 text-center font-bold text-slate-700 dark:text-slate-200">{it.quantity}</td>
-                    <td className="py-2.5 text-right text-slate-600 dark:text-slate-300">{formatCurrency(it.price)}</td>
+                    <td className="py-2.5 text-center font-bold text-slate-700 dark:text-slate-200">
+                      {it.quantity} {it.unitName || it.product?.unit || 'Cái'}
+                    </td>
+                    <td className="py-2.5 text-right text-slate-600 dark:text-slate-300">
+                      {formatCurrency(it.price)}
+                    </td>
                     <td className="py-2.5 text-right font-bold text-slate-800 dark:text-slate-100">{formatCurrency(it.quantity * it.price)}</td>
                   </tr>
                 ))}

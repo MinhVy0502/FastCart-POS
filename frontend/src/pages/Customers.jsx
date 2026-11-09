@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { 
   Users, Plus, Search, Edit2, Trash2, Phone, Mail, MapPin, 
   ShoppingBag, History, Store, CreditCard, DollarSign, AlertTriangle, 
@@ -11,12 +12,22 @@ import { formatCurrency, formatDate, getErrorMessage } from '../utils/format';
 
 const Customers = () => {
   const { toast, confirm } = useToast();
+  const location = useLocation();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState(null);
   const [search, setSearch] = useState('');
   const [filterType, setFilterType] = useState('ALL'); // 'ALL' | 'WHOLESALE' | 'RETAIL' | 'DEBT'
   const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const qSearch = params.get('search');
+    if (qSearch !== null) {
+      setSearch(qSearch);
+      setPage(1);
+    }
+  }, [location.search]);
 
   // Modal create/edit
   const [modalOpen, setModalOpen] = useState(false);

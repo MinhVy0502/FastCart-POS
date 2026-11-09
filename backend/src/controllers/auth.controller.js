@@ -5,7 +5,7 @@ const jwt = require('jsonwebtoken');
 const register = async (req, res, next) => {
   try {
     const { password, name, phone } = req.body;
-    const email = typeof req.body.email === 'string' ? req.body.email.trim() : '';
+    const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
 
     if (!email || typeof password !== 'string' || !name) {
       return res.status(400).json({ success: false, message: 'Vui lòng nhập đầy đủ họ tên, email và mật khẩu' });
@@ -47,7 +47,7 @@ const register = async (req, res, next) => {
 const login = async (req, res, next) => {
   try {
     const { password } = req.body;
-    const email = typeof req.body.email === 'string' ? req.body.email.trim() : '';
+    const email = typeof req.body.email === 'string' ? req.body.email.trim().toLowerCase() : '';
 
     if (!email || typeof password !== 'string' || !password) {
       return res.status(400).json({ success: false, message: 'Vui lòng nhập email và mật khẩu' });

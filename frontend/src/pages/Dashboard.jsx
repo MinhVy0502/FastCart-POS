@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   TrendingUp, Package, AlertTriangle, DollarSign, Activity, 
-  ShoppingCart, Truck, ArrowRight, Store, ArrowUpRight, CheckCircle2 
+  ShoppingCart, Truck, ArrowRight, Store, ArrowUpRight, CheckCircle2,
+  Clock
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import api from '../services/api';
@@ -12,13 +13,18 @@ import { SkeletonRows } from '../components/ui';
 const Dashboard = () => {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
+  const [expiringSummary, setExpiringSummary] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchDashboard = async () => {
       try {
-        const res = await api.get('/analytics/dashboard');
-        setData(res.data.data);
+        const [dashRes, expRes] = await Promise.all([
+          api.get('/analytics/dashboard'),
+          api.get('/products/expiring?days=30').catch(() => ({ data: { summary: null } }))
+        ]);
+        setData(dashRes.data.data);
+        setExpiringSummary(expRes.data?.summary || null);
       } catch (err) {
         console.error(err);
       } finally {
@@ -96,6 +102,37 @@ const Dashboard = () => {
           <h3 className="text-2xl font-black text-amber-500">{summary.lowStock} <span className="text-sm font-semibold text-slate-400">sp</span></h3>
         </div>
       </div>
+
+      {/* Expiry Warning Alert Banner */}
+      {expiringSummary?.totalExpiring > 0 && (
+        <div 
+          onClick={() => navigate('/inventory?tab=expiring')}
+          className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-4 cursor-pointer hover:bg-amber-500/15 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500 text-white flex items-center justify-center shrink-0 shadow-sm shadow-amber-500/30">
+              <Clock size={20} />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-slate-800 dark:text-slate-100 flex items-center gap-2">
+                <span>Cảnh báo: Có {expiringSummary.totalExpiring} lô hàng cận hạn sử dụng</span>
+                {expiringSummary.expiredCount > 0 && (
+                  <span className="text-[10px] font-extrabold text-white bg-rose-500 px-2 py-0.5 rounded-full">
+                    {expiringSummary.expiredCount} lô đã hết hạn!
+                  </span>
+                )}
+              </h4>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Các mặt hàng này cần được ưu tiên bán trước (FEFO) hoặc thanh lý để tránh tổn thất tồn đọng.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 text-xs font-bold text-amber-600 dark:text-amber-400 shrink-0">
+            <span>Kiểm tra kho</span>
+            <ArrowRight size={14} />
+          </div>
+        </div>
+      )}
 
       {/* Chart & Recent Sales */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

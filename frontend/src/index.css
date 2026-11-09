@@ -191,69 +191,314 @@ input[type=number] {
   -moz-appearance: textfield;
 }
 
-/* ---------- Dark mode ----------
-   Đảo thang màu slate + làm dịu các màu pastel để toàn bộ giao diện
-   tự chuyển sang tối mà không cần thêm class dark: vào từng phần tử. */
+/* ---------- Dark mode (Cao cấp, Hiện đại, Chuẩn thiết kế UI/UX) ----------
+   LƯU Ý: Tuyệt đối không thay đổi giao diện sáng (Light mode).
+   Toàn bộ quy tắc dưới đây chỉ kích hoạt khi thẻ html có class .dark. */
 html.dark {
   color-scheme: dark;
-  --color-slate-50: #0b1220;
-  --color-slate-100: #1a2436;
-  --color-slate-200: #2a3548;
-  --color-slate-300: #3d4a60;
-  --color-slate-400: #6b7a90;
-  --color-slate-500: #94a3b8;
-  --color-slate-600: #b8c4d4;
-  --color-slate-700: #d5dde8;
-  --color-slate-800: #e8edf4;
-  --color-slate-900: #f5f7fa;
 
-  --color-sky-50: color-mix(in oklab, var(--color-sky-500) 14%, transparent);
-  --color-sky-100: color-mix(in oklab, var(--color-sky-500) 22%, transparent);
-  --color-emerald-50: color-mix(in oklab, var(--color-emerald-500) 14%, transparent);
-  --color-emerald-100: color-mix(in oklab, var(--color-emerald-500) 22%, transparent);
-  --color-rose-50: color-mix(in oklab, var(--color-rose-500) 14%, transparent);
-  --color-rose-100: color-mix(in oklab, var(--color-rose-500) 22%, transparent);
-  --color-red-50: color-mix(in oklab, var(--color-red-500) 14%, transparent);
-  --color-red-100: color-mix(in oklab, var(--color-red-500) 22%, transparent);
-  --color-amber-50: color-mix(in oklab, var(--color-amber-500) 14%, transparent);
-  --color-amber-100: color-mix(in oklab, var(--color-amber-500) 22%, transparent);
-  --color-orange-50: color-mix(in oklab, var(--color-orange-500) 14%, transparent);
-  --color-orange-100: color-mix(in oklab, var(--color-orange-500) 22%, transparent);
-  --color-violet-50: color-mix(in oklab, var(--color-violet-500) 14%, transparent);
-  --color-violet-100: color-mix(in oklab, var(--color-violet-500) 22%, transparent);
-  --color-indigo-50: color-mix(in oklab, var(--color-indigo-500) 14%, transparent);
-  --color-indigo-100: color-mix(in oklab, var(--color-indigo-500) 22%, transparent);
+  /* Giữ màu sắc pastel dạng phát quang trong suốt (translucent glow) */
+  --color-sky-50: rgba(14, 165, 233, 0.12);
+  --color-sky-100: rgba(14, 165, 233, 0.2);
+  --color-emerald-50: rgba(16, 185, 129, 0.12);
+  --color-emerald-100: rgba(16, 185, 129, 0.2);
+  --color-rose-50: rgba(244, 63, 94, 0.12);
+  --color-rose-100: rgba(244, 63, 94, 0.2);
+  --color-red-50: rgba(239, 68, 68, 0.12);
+  --color-red-100: rgba(239, 68, 68, 0.2);
+  --color-amber-50: rgba(245, 158, 11, 0.12);
+  --color-amber-100: rgba(245, 158, 11, 0.2);
+  --color-orange-50: rgba(249, 115, 22, 0.12);
+  --color-orange-100: rgba(249, 115, 22, 0.2);
+  --color-violet-50: rgba(139, 92, 246, 0.12);
+  --color-violet-100: rgba(139, 92, 246, 0.2);
+  --color-indigo-50: rgba(99, 102, 241, 0.12);
+  --color-indigo-100: rgba(99, 102, 241, 0.2);
 
-  --color-sky-600: var(--color-sky-400);
-  --color-sky-700: var(--color-sky-300);
-  --color-emerald-600: var(--color-emerald-400);
-  --color-emerald-700: var(--color-emerald-300);
-  --color-rose-600: var(--color-rose-400);
-  --color-red-600: var(--color-red-400);
-  --color-amber-600: var(--color-amber-400);
-  --color-amber-700: var(--color-amber-300);
-  --color-orange-600: var(--color-orange-400);
-  --color-violet-600: var(--color-violet-400);
-  --color-indigo-600: var(--color-indigo-400);
+  /* Tăng độ tương phản chữ trên nền tối */
+  --color-sky-600: #38bdf8;
+  --color-sky-700: #7dd3fc;
+  --color-emerald-600: #34d399;
+  --color-emerald-700: #6ee7b7;
+  --color-rose-600: #fb7185;
+  --color-red-600: #f87171;
+  --color-amber-600: #fbbf24;
+  --color-amber-700: #fde047;
+  --color-orange-600: #fb923c;
+  --color-violet-600: #a78bfa;
+  --color-indigo-600: #818cf8;
 }
 
-/* Bề mặt trắng → nền thẻ tối (CSS ngoài layer nên ưu tiên hơn utilities) */
-html.dark .bg-white,
+/* Nền chính toàn trang (Obsidian Midnight với vệt sáng gradient tinh tế) */
+html.dark body {
+  background-color: #070b15 !important;
+  background-image: 
+    radial-gradient(at 15% 15%, rgba(14, 165, 233, 0.05) 0px, transparent 50%),
+    radial-gradient(at 85% 85%, rgba(99, 102, 241, 0.04) 0px, transparent 50%) !important;
+  color: #f1f5f9 !important;
+}
+
+/* Khung layout & Container chính */
+html.dark [class*="dark:bg-\[#070b14\]"] {
+  background-color: #070b15 !important;
+}
+
+html.dark [class*="dark:bg-\[#0e1726\]"] {
+  background-color: rgba(13, 21, 38, 0.92) !important;
+  border-color: rgba(255, 255, 255, 0.07) !important;
+  box-shadow: 0 10px 40px -10px rgba(0, 0, 0, 0.5) !important;
+}
+
+/* Sidebar tối cao cấp */
+html.dark [class*="dark:bg-\[#0c1322\]"],
+html.dark aside {
+  background-color: #09101d !important;
+  border-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+/* Nút Nav đang chọn (Active): Gradient Sky mượt mà + Soft Glow sang trọng */
+html.dark aside nav a[class*="bg-sky-400"] {
+  background: linear-gradient(135deg, #0284c7 0%, #0369a1 40%, #0ea5e9 100%) !important;
+  box-shadow: 0 4px 18px -2px rgba(14, 165, 233, 0.45), inset 0 1px 0 0 rgba(255, 255, 255, 0.25) !important;
+  color: #ffffff !important;
+  font-weight: 700 !important;
+}
+
+/* Nút Nav chưa chọn */
+html.dark aside nav a:not([class*="bg-sky-400"]) {
+  color: #94a3b8 !important;
+}
+
+html.dark aside nav a:not([class*="bg-sky-400"]):hover {
+  background-color: rgba(255, 255, 255, 0.05) !important;
+  color: #ffffff !important;
+}
+
+/* Khung hiển thị tên cửa hàng trong Sidebar */
+html.dark aside [class*="hover:border-sky-300"] {
+  background: linear-gradient(180deg, #0e172a 0%, #0a1120 100%) !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.04) !important;
+}
+
+html.dark aside [class*="hover:border-sky-300"]:hover {
+  border-color: rgba(56, 189, 248, 0.4) !important;
+  box-shadow: 0 4px 16px -2px rgba(0, 0, 0, 0.4), inset 0 1px 0 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+/* Thẻ Card nội dung: Nền Midnight Slate + Viền Hairline tinh tế (Hết viền trắng thô) */
 html.dark .card,
-html.dark .btn-secondary {
-  background-color: #111a2b;
+html.dark [class*="dark:bg-\[#111a2e\]"],
+html.dark [class*="dark:bg-\[#151f33\]"] {
+  background-color: #0e172a !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.4), inset 0 1px 0 0 rgba(255, 255, 255, 0.04) !important;
 }
 
-html.dark .bg-white\/80 {
-  background-color: rgb(17 26 43 / .8);
+/* Thẻ tự động thích ứng nếu không có class dark */
+html.dark .bg-white:not(aside nav a) {
+  background-color: #0e172a;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+html.dark .bg-white\/70,
+html.dark .bg-white\/80,
+html.dark .bg-white\/90 {
+  background-color: rgba(14, 23, 42, 0.88);
 }
 
 html.dark .bg-white\/60 {
-  background-color: rgb(17 26 43 / .6);
+  background-color: rgba(14, 23, 42, 0.6);
+}
+
+/* Ô nhập liệu (Inputs, Selects, Date pickers): Tạo độ sâu tự nhiên */
+html.dark .input,
+html.dark [class*="dark:bg-\[#1a2642\]"],
+html.dark input[type="text"],
+html.dark input[type="search"],
+html.dark input[type="date"],
+html.dark input[type="number"],
+html.dark input[type="tel"],
+html.dark input[type="password"],
+html.dark select,
+html.dark textarea {
+  background-color: #080f1e !important;
+  border-color: rgba(255, 255, 255, 0.12) !important;
+  color: #f1f5f9 !important;
+  color-scheme: dark;
+}
+
+html.dark .input::placeholder,
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #64748b !important;
+}
+
+html.dark .input:focus,
+html.dark input:focus,
+html.dark select:focus,
+html.dark textarea:focus {
+  border-color: #38bdf8 !important;
+  box-shadow: 0 0 0 3px rgba(56, 189, 248, 0.22) !important;
+  background-color: #0a1324 !important;
+}
+
+/* Thay thế toàn bộ viền trắng thô thành viền hairline tối sang trọng */
+html.dark [class*="dark:border-slate-800"],
+html.dark [class*="dark:border-slate-700"] {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+html.dark [class*="dark:border-slate-800\/80"],
+html.dark [class*="dark:border-slate-800\/60"] {
+  border-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+html.dark .border-slate-100:not([class*="dark:border"]),
+html.dark .border-slate-200:not([class*="dark:border"]) {
+  border-color: rgba(255, 255, 255, 0.07);
 }
 
 html.dark .border-white {
-  border-color: #1a2436;
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
+/* Nút bấm trong chế độ tối */
+html.dark .btn-secondary {
+  background-color: #111c30 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+  color: #e2e8f0 !important;
+  box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.3), inset 0 1px 0 0 rgba(255, 255, 255, 0.05) !important;
+}
+
+html.dark .btn-secondary:hover {
+  background-color: #172642 !important;
+  border-color: rgba(255, 255, 255, 0.16) !important;
+  color: #ffffff !important;
+}
+
+html.dark .btn-ghost:hover,
+html.dark .icon-btn:hover {
+  background-color: rgba(255, 255, 255, 0.06) !important;
+  color: #f8fafc !important;
+}
+
+html.dark .btn-primary {
+  background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%) !important;
+  box-shadow: 0 4px 16px -2px rgba(14, 165, 233, 0.4), inset 0 1px 0 0 rgba(255, 255, 255, 0.2) !important;
+}
+
+html.dark .btn-success {
+  background: linear-gradient(135deg, #059669 0%, #10b981 100%) !important;
+  box-shadow: 0 4px 16px -2px rgba(16, 185, 129, 0.4), inset 0 1px 0 0 rgba(255, 255, 255, 0.2) !important;
+}
+
+/* Hộp biểu tượng EmptyState (Trạng thái rỗng không có dữ liệu) */
+html.dark .w-20.h-20.bg-slate-50,
+html.dark .w-20.h-20[class*="bg-slate-50"],
+html.dark .w-20.h-20[class*="dark:bg-slate-800"] {
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.08) 0%, rgba(15, 23, 42, 0.7) 100%) !important;
+  border-color: rgba(56, 189, 248, 0.2) !important;
+  box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.5), inset 0 1px 0 0 rgba(255, 255, 255, 0.08) !important;
+}
+
+html.dark .w-20.h-20 svg,
+html.dark .w-20.h-20[class*="dark:bg-slate-800"] svg {
+  color: #38bdf8 !important;
+  filter: drop-shadow(0 2px 10px rgba(56, 189, 248, 0.35)) !important;
+}
+
+/* Tiêu đề & Bảng dữ liệu */
+html.dark .th,
+html.dark thead tr {
+  background-color: #0b1220 !important;
+  border-bottom-color: rgba(255, 255, 255, 0.08) !important;
+  color: #94a3b8 !important;
+}
+
+html.dark .td {
+  border-bottom-color: rgba(255, 255, 255, 0.05) !important;
+  color: #e2e8f0 !important;
+}
+
+html.dark tbody tr:hover {
+  background-color: rgba(255, 255, 255, 0.025) !important;
+}
+
+/* Modals & Dropdowns */
+html.dark .modal-content,
+html.dark [role="dialog"],
+html.dark .animate-pop-in {
+  background-color: #0e172a !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  box-shadow: 0 25px 60px -15px rgba(0, 0, 0, 0.75), inset 0 1px 0 0 rgba(255, 255, 255, 0.06) !important;
+}
+
+/* Recharts Tooltips trên Dark Mode */
+html.dark .recharts-default-tooltip {
+  background-color: #0e172a !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  border-radius: 16px !important;
+  color: #f1f5f9 !important;
+  box-shadow: 0 12px 30px -4px rgba(0, 0, 0, 0.6) !important;
+}
+
+html.dark .recharts-tooltip-item {
+  color: #38bdf8 !important;
+}
+
+html.dark .recharts-cartesian-grid line {
+  stroke: rgba(255, 255, 255, 0.06) !important;
+}
+
+/* Thanh cuộn tối gọn gàng */
+html.dark ::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+html.dark ::-webkit-scrollbar-track {
+  background: #080d18;
+}
+html.dark ::-webkit-scrollbar-thumb {
+  background: #1e293b;
+  border-radius: 9999px;
+  border: 2px solid #080d18;
+}
+html.dark ::-webkit-scrollbar-thumb:hover {
+  background: #334155;
+}
+
+/* Card hover glow & tương tác mượt mà */
+html.dark .card:hover {
+  border-color: rgba(56, 189, 248, 0.3) !important;
+  box-shadow: 0 8px 30px -4px rgba(0, 0, 0, 0.5), 0 0 20px -3px rgba(14, 165, 233, 0.12) !important;
+}
+
+/* Tự động tối ưu màu chữ khi không có class dark: riêng */
+html.dark .text-slate-800:not([class*="dark:text"]),
+html.dark .text-slate-900:not([class*="dark:text"]) {
+  color: #f1f5f9;
+}
+html.dark .text-slate-700:not([class*="dark:text"]) {
+  color: #e2e8f0;
+}
+html.dark .text-slate-600:not([class*="dark:text"]) {
+  color: #cbd5e1;
+}
+html.dark .text-slate-500:not([class*="dark:text"]) {
+  color: #94a3b8;
+}
+
+/* Header và thanh công cụ tìm kiếm trên Header */
+html.dark header {
+  background-color: rgba(13, 21, 38, 0.88) !important;
+  border-bottom-color: rgba(255, 255, 255, 0.07) !important;
+  backdrop-filter: blur(16px) !important;
+}
+
+html.dark header button[class*="bg-sky-400"] {
+  background: linear-gradient(135deg, #0284c7 0%, #0ea5e9 100%) !important;
+  box-shadow: 0 4px 14px -1px rgba(14, 165, 233, 0.4), inset 0 1px 0 0 rgba(255, 255, 255, 0.2) !important;
 }
 
 html.dark .skeleton::after {
@@ -263,5 +508,5 @@ html.dark .skeleton::after {
 html.dark .shadow-sm,
 html.dark .shadow-md,
 html.dark .shadow-xl {
-  --tw-shadow-color: rgb(0 0 0 / .35);
+  --tw-shadow-color: rgb(0 0 0 / .45);
 }

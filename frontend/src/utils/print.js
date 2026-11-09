@@ -44,7 +44,7 @@ export const buildReceiptHtml = (sale, settings = {}) => {
   const rows = items.map((it, i) => `
     <tr><td colspan="3" class="name">${i + 1}. ${esc(it.product?.name || it.name)}</td></tr>
     <tr class="sub">
-      <td>${it.quantity} x ${formatCurrency(it.price)}</td>
+      <td>${it.quantity} ${esc(it.unitName || it.product?.unit || it.unit || 'Cái')} x ${formatCurrency(it.price)}</td>
       <td></td>
       <td class="r">${formatCurrency(it.quantity * it.price)}</td>
     </tr>`).join('');
@@ -125,7 +125,7 @@ export const printBarcodeLabels = (labels, { layout = 'a4', showPrice = true, st
       <div class="label">
         ${storeName ? `<div class="store">${esc(storeName)}</div>` : ''}
         <div class="name">${esc(product.name)}</div>
-        ${barcodeSvg(product.sku)}
+        ${barcodeSvg(product.barcode || product.sku)}
         ${showPrice ? `<div class="price">${formatCurrency(product.salePrice)}</div>` : ''}
       </div>`)
   ).join('');
@@ -163,7 +163,7 @@ export const buildDeliveryNoteHtml = (sale, settings = {}) => {
       <td class="c">${i + 1}</td>
       <td class="mono">${esc(it.product?.sku || it.sku || '')}</td>
       <td class="b">${esc(it.product?.name || it.name)}</td>
-      <td class="c">Cái</td>
+      <td class="c">${esc(it.unitName || it.product?.unit || it.unit || 'Cái')}</td>
       <td class="c b">${it.quantity}</td>
       <td class="r">${formatCurrency(it.price)}</td>
       <td class="r b">${formatCurrency(it.quantity * it.price)}</td>

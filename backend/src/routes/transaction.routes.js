@@ -8,6 +8,7 @@ purchaseRouter.use(protect);
 purchaseRouter.get('/', purchaseCtrl.getAll);
 purchaseRouter.get('/:id', purchaseCtrl.getOne);
 purchaseRouter.post('/', purchaseCtrl.create);
+purchaseRouter.post('/:id/cancel', purchaseCtrl.cancel);
 
 const saleRouter = express.Router();
 saleRouter.use(protect);

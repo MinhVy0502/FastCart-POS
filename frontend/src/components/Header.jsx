@@ -164,8 +164,9 @@ const Header = ({ sidebarOpen, setSidebarOpen }) => {
                             <p className="text-sm font-semibold text-slate-800 dark:text-slate-100">{p.name}</p>
                             <p className="text-xs text-slate-400 dark:text-slate-500 flex items-center gap-1.5 flex-wrap">
                               <span>SKU: {p.sku}</span>
+                              {p.barcode && <span>· Mã vạch: {p.barcode}</span>}
                               <span>·</span>
-                              <span>Kho: {p.currentStock}</span>
+                              <span>Kho: {p.currentStock} {p.unit || 'Cái'}</span>
                               {p.shelf && (
                                 <>
                                   <span>·</span>

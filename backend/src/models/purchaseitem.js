@@ -12,7 +12,12 @@ module.exports = (sequelize, DataTypes) => {
     purchaseId: DataTypes.UUID,
     productId: DataTypes.UUID,
     quantity: { type: DataTypes.INTEGER, allowNull: false },
-    price: { type: DataTypes.DECIMAL(15, 2), allowNull: false }
+    price: { type: DataTypes.DECIMAL(15, 2), allowNull: false },
+    unitName: { type: DataTypes.STRING, allowNull: true },
+    conversionFactor: { type: DataTypes.INTEGER, defaultValue: 1 },
+    batchNumber: { type: DataTypes.STRING, allowNull: true },
+    expiryDate: { type: DataTypes.DATE, allowNull: true },
+    manufacturingDate: { type: DataTypes.DATE, allowNull: true }
   }, { sequelize, modelName: 'PurchaseItem' });
   return PurchaseItem;
 };

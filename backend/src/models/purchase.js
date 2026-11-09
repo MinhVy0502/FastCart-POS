@@ -14,6 +14,9 @@ module.exports = (sequelize, DataTypes) => {
     supplierId: DataTypes.UUID,
     userId: DataTypes.UUID,
     totalAmount: { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
+    paidAmount: { type: DataTypes.DECIMAL(15, 2), defaultValue: 0 },
+    paymentMethod: { type: DataTypes.STRING, defaultValue: 'CASH' },
+    status: { type: DataTypes.STRING, defaultValue: 'COMPLETED' },
     note: DataTypes.TEXT
   }, { sequelize, modelName: 'Purchase' });
   return Purchase;

@@ -1,5 +1,5 @@
 const { Op } = require('sequelize');
-const { Sale, SaleItem, Product, InventoryTransaction, Customer, User, DebtHistory, sequelize } = require('../models');
+const { Sale, SaleItem, Product, InventoryTransaction, ProductBatch, Customer, User, DebtHistory, sequelize } = require('../models');
 const AppError = require('../utils/AppError');
 const { getPaging, buildPagination, dateRange, generateCode, toNumber } = require('../utils/query');
 
@@ -48,7 +48,10 @@ exports.getOne = async (req, res, next) => {
         {
           model: SaleItem,
           as: 'items',
-          include: [{ model: Product, as: 'product', attributes: ['id', 'name', 'sku', 'wholesalePrice', 'salePrice'] }]
+          include: [
+            { model: Product, as: 'product', attributes: ['id', 'name', 'sku', 'barcode', 'unit', 'wholesalePrice', 'salePrice'] },
+            { model: ProductBatch, as: 'batch', attributes: ['id', 'batchNumber', 'expiryDate'] }
+          ]
         }
       ]
     });
@@ -83,7 +86,11 @@ exports.create = async (req, res, next) => {
     let totalAmount = 0;
     for (const item of items) {
       const quantity = parseInt(item.quantity);
-      const price = toNumber(item.price, -1);
+      const rawPrice = item.price !== undefined ? item.price : item.unitPrice;
+      const price = toNumber(rawPrice, -1);
+      const factor = Math.max(parseInt(item.conversionFactor) || 1, 1);
+      const unitName = String(item.unitName || item.unit || '').trim();
+
       if (!Number.isInteger(quantity) || quantity <= 0) throw new AppError('Số lượng phải là số nguyên dương');
       if (price < 0) throw new AppError('Đơn giá không hợp lệ');
 
@@ -93,11 +100,21 @@ exports.create = async (req, res, next) => {
         lock: transaction.LOCK.UPDATE
       });
       if (!product) throw new AppError('Sản phẩm không tồn tại');
-      if (product.currentStock < quantity) {
-        throw new AppError(`Sản phẩm "${product.name}" không đủ tồn kho (còn ${product.currentStock})`);
+
+      const baseQtyNeeded = quantity * factor;
+      if (product.currentStock < baseQtyNeeded) {
+        throw new AppError(`Sản phẩm "${product.name}" không đủ tồn kho (còn ${product.currentStock} ${product.unit || 'Cái'}, cần ${baseQtyNeeded} ${product.unit || 'Cái'})`);
       }
       totalAmount += quantity * price;
-      lines.push({ product, quantity, price });
+      lines.push({
+        product,
+        quantity,
+        price,
+        factor,
+        unitName: unitName || product.unit || 'Cái',
+        batchId: item.batchId || null,
+        baseQtyNeeded
+      });
     }
 
     if (discount > totalAmount) throw new AppError('Giảm giá không được lớn hơn tổng tiền');
@@ -150,23 +167,58 @@ exports.create = async (req, res, next) => {
       userId: req.user.id
     }, { transaction });
 
-    for (const { product, quantity, price } of lines) {
+    for (const line of lines) {
+      const { product, quantity, price, factor, unitName, baseQtyNeeded } = line;
+
+      // Xử lý trừ lô theo FEFO (First Expired First Out) nếu sản phẩm có theo dõi HSD
+      let assignedBatchId = line.batchId;
+      if (assignedBatchId) {
+        const batch = await ProductBatch.findOne({
+          where: { id: assignedBatchId, productId: product.id },
+          transaction,
+          lock: transaction.LOCK.UPDATE
+        });
+        if (batch) {
+          await batch.update({ currentQuantity: Math.max(batch.currentQuantity - baseQtyNeeded, 0) }, { transaction });
+        }
+      } else if (product.hasExpiryDate) {
+        // Tự động tìm lô cận date nhất còn hàng (FEFO)
+        const batches = await ProductBatch.findAll({
+          where: { productId: product.id, currentQuantity: { [Op.gt]: 0 } },
+          order: [['expiryDate', 'ASC']],
+          transaction,
+          lock: transaction.LOCK.UPDATE
+        });
+
+        let remainingToDeduct = baseQtyNeeded;
+        for (const b of batches) {
+          if (remainingToDeduct <= 0) break;
+          const deductFromThis = Math.min(b.currentQuantity, remainingToDeduct);
+          await b.update({ currentQuantity: b.currentQuantity - deductFromThis }, { transaction });
+          remainingToDeduct -= deductFromThis;
+          if (!assignedBatchId) assignedBatchId = b.id;
+        }
+      }
+
       await SaleItem.create({
         saleId: sale.id,
         productId: product.id,
         quantity,
         price,
-        costPrice: product.importPrice
+        costPrice: Number(product.importPrice) * factor,
+        unitName,
+        conversionFactor: factor,
+        batchId: assignedBatchId || null
       }, { transaction });
 
-      await product.update({ currentStock: product.currentStock - quantity }, { transaction });
+      await product.update({ currentStock: product.currentStock - baseQtyNeeded }, { transaction });
 
       await InventoryTransaction.create({
         productId: product.id,
         type: 'OUT',
-        quantity,
+        quantity: baseQtyNeeded,
         referenceCode: code,
-        note: `Bán hàng hóa đơn ${code}`
+        note: `Bán hàng hóa đơn ${code} (${quantity} ${unitName})`
       }, { transaction });
     }
 
@@ -185,25 +237,37 @@ exports.create = async (req, res, next) => {
           balanceAfter,
           referenceCode: code,
           paymentMethod,
-          note: `Mua nợ từ đơn hàng ${code}${customerPaid > 0 ? ` (Đã trả trước ${customerPaid.toLocaleString('vi-VN')}đ)` : ''}`
+          note: `Mua nợ đơn hàng ${code}`
         }, { transaction });
 
-        await customer.update({
-          totalSpent: newTotalSpent,
-          currentDebt: balanceAfter
-        }, { transaction });
+        await customer.update({ currentDebt: balanceAfter, totalSpent: newTotalSpent }, { transaction });
       } else {
-        await customer.update({
-          totalSpent: newTotalSpent
-        }, { transaction });
+        await customer.update({ totalSpent: newTotalSpent }, { transaction });
       }
     }
 
     await transaction.commit();
+
+    // Lấy lại đơn hàng đầy đủ để in hóa đơn
+    const createdSale = await Sale.findByPk(sale.id, {
+      include: [
+        { model: Customer, as: 'customer', attributes: ['id', 'name', 'phone', 'address', 'storeName', 'customerType', 'currentDebt', 'debtLimit'] },
+        { model: User, as: 'user', attributes: ['name'] },
+        {
+          model: SaleItem,
+          as: 'items',
+          include: [
+            { model: Product, as: 'product', attributes: ['id', 'name', 'sku', 'barcode', 'unit', 'wholesalePrice', 'salePrice'] },
+            { model: ProductBatch, as: 'batch', attributes: ['id', 'batchNumber', 'expiryDate'] }
+          ]
+        }
+      ]
+    });
+
     res.status(201).json({
       success: true,
-      message: debtWarning ? 'Tạo hóa đơn thành công (Lưu ý: công nợ vượt hạn mức)' : 'Tạo hóa đơn thành công',
-      data: sale,
+      message: 'Tạo hóa đơn thành công',
+      data: createdSale,
       debtWarning
     });
   } catch (err) {
@@ -212,10 +276,10 @@ exports.create = async (req, res, next) => {
   }
 };
 
-/** Hủy hóa đơn: hoàn tồn kho, trừ tổng chi tiêu của khách. */
 exports.cancel = async (req, res, next) => {
   const transaction = await sequelize.transaction();
   try {
+    const { reason } = req.body;
     const sale = await Sale.findOne({
       where: { id: req.params.id, userId: req.user.id },
       transaction,
@@ -224,7 +288,7 @@ exports.cancel = async (req, res, next) => {
     if (!sale) throw new AppError('Không tìm thấy hóa đơn', 404);
     if (sale.status === 'CANCELLED') throw new AppError('Hóa đơn này đã bị hủy trước đó');
 
-    const reason = (req.body.reason || '').trim();
+    const reasonClean = (reason || '').trim();
     const items = await SaleItem.findAll({ where: { saleId: sale.id }, transaction });
 
     for (const item of items) {
@@ -234,13 +298,49 @@ exports.cancel = async (req, res, next) => {
         lock: transaction.LOCK.UPDATE
       });
       if (!product) continue;
-      await product.update({ currentStock: product.currentStock + item.quantity }, { transaction });
+
+      const returnedBaseQty = item.quantity * (item.conversionFactor || 1);
+      await product.update({ currentStock: product.currentStock + returnedBaseQty }, { transaction });
+
+      // Nếu có liên kết lô hàng, hoàn lại số lượng vào lô đó (và phân bổ sang lô tiếp theo nếu vượt initialQuantity)
+      if (item.batchId) {
+        let remainingToRestore = returnedBaseQty;
+        const batch = await ProductBatch.findOne({ where: { id: item.batchId }, transaction, lock: transaction.LOCK.UPDATE });
+        if (batch) {
+          const maxCanAdd = batch.initialQuantity > 0
+            ? Math.max(batch.initialQuantity - batch.currentQuantity, 0)
+            : remainingToRestore;
+          const addNow = Math.min(remainingToRestore, maxCanAdd || remainingToRestore);
+          await batch.update({ currentQuantity: batch.currentQuantity + addNow }, { transaction });
+          remainingToRestore -= addNow;
+        }
+        if (remainingToRestore > 0) {
+          const otherBatches = await ProductBatch.findAll({
+            where: { productId: product.id, id: { [Op.ne]: item.batchId } },
+            order: [['expiryDate', 'ASC']],
+            transaction,
+            lock: transaction.LOCK.UPDATE
+          });
+          for (const ob of otherBatches) {
+            if (remainingToRestore <= 0) break;
+            const room = ob.initialQuantity > 0 ? Math.max(ob.initialQuantity - ob.currentQuantity, 0) : remainingToRestore;
+            if (room <= 0) continue;
+            const add = Math.min(remainingToRestore, room);
+            await ob.update({ currentQuantity: ob.currentQuantity + add }, { transaction });
+            remainingToRestore -= add;
+          }
+          if (remainingToRestore > 0 && batch) {
+            await batch.update({ currentQuantity: batch.currentQuantity + remainingToRestore }, { transaction });
+          }
+        }
+      }
+
       await InventoryTransaction.create({
         productId: product.id,
         type: 'IN',
-        quantity: item.quantity,
+        quantity: returnedBaseQty,
         referenceCode: sale.code,
-        note: `Hoàn kho do hủy hóa đơn ${sale.code}${reason ? ` – ${reason}` : ''}`
+        note: `Hoàn kho do hủy hóa đơn ${sale.code}${reasonClean ? ` – ${reasonClean}` : ''}`
       }, { transaction });
     }
 
@@ -261,7 +361,7 @@ exports.cancel = async (req, res, next) => {
             balanceBefore: currentDebt,
             balanceAfter: newDebt,
             referenceCode: sale.code,
-            note: `Giảm nợ do hủy hóa đơn ${sale.code}${reason ? ` – ${reason}` : ''}`
+            note: `Giảm nợ do hủy hóa đơn ${sale.code}${reasonClean ? ` – ${reasonClean}` : ''}`
           }, { transaction });
           await customer.update({ totalSpent: newTotal, currentDebt: newDebt }, { transaction });
         } else {
@@ -270,7 +370,7 @@ exports.cancel = async (req, res, next) => {
       }
     }
 
-    const note = reason ? `${sale.note ? sale.note + '\n' : ''}[Đã hủy] ${reason}` : sale.note;
+    const note = reasonClean ? `${sale.note ? sale.note + '\n' : ''}[Đã hủy] ${reasonClean}` : sale.note;
     await sale.update({ status: 'CANCELLED', note }, { transaction });
 
     await transaction.commit();

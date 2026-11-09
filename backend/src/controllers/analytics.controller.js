@@ -75,8 +75,8 @@ const timeSeries = async (userId, from, to, unit = 'day') => {
 };
 
 const topProducts = (userId, from, to, limit = 10) => query(`
-  SELECT p.id, p.name, p.sku, p."currentStock",
-         SUM(si.quantity)::int AS quantity,
+  SELECT p.id, p.name, p.sku, p.unit, p."currentStock",
+         SUM(si.quantity * COALESCE(si."conversionFactor", 1))::int AS quantity,
          SUM(si.quantity * si.price) AS revenue,
          SUM(si.quantity * (si.price - si."costPrice")) AS profit
   FROM "SaleItems" si
@@ -102,7 +102,7 @@ exports.getDashboardData = async (req, res, next) => {
       timeSeries(userId, sevenDaysAgo, end, 'day'),
       topProducts(userId, thirtyDaysAgo, end, 5),
       Sale.sum('finalAmount', { where: { userId, status: 'COMPLETED' } }),
-      Purchase.sum('totalAmount', { where: { userId } }),
+      Purchase.sum('totalAmount', { where: { userId, status: 'COMPLETED' } }),
       Product.count({ where: { userId } }),
       query(`SELECT COUNT(*)::int AS count FROM "Products" WHERE "userId" = :userId AND "currentStock" <= "minStock"`, { userId }),
       Sale.findAll({
@@ -155,8 +155,8 @@ exports.getReports = async (req, res, next) => {
       timeSeries(userId, from, to, unit),
       topProducts(userId, from, to, 10),
       query(`
-        SELECT p.id, p.name, p.sku, p."currentStock",
-               COALESCE(SUM(si.quantity) FILTER (WHERE s.id IS NOT NULL), 0)::int AS quantity
+        SELECT p.id, p.name, p.sku, p.unit, p."currentStock",
+               COALESCE(SUM(si.quantity * COALESCE(si."conversionFactor", 1)) FILTER (WHERE s.id IS NOT NULL), 0)::int AS quantity
         FROM "Products" p
         LEFT JOIN "SaleItems" si ON si."productId" = p.id
         LEFT JOIN "Sales" s ON s.id = si."saleId" AND s.status = 'COMPLETED' AND s."createdAt" BETWEEN :from AND :to
@@ -190,7 +190,7 @@ exports.getReports = async (req, res, next) => {
       `, { userId, from, to }),
       query(`
         SELECT COUNT(*)::int AS count, COALESCE(SUM("totalAmount"), 0) AS amount
-        FROM "Purchases" WHERE "userId" = :userId AND "createdAt" BETWEEN :from AND :to
+        FROM "Purchases" WHERE "userId" = :userId AND COALESCE("status", 'COMPLETED') = 'COMPLETED' AND "createdAt" BETWEEN :from AND :to
       `, { userId, from, to }),
       query(`
         SELECT COALESCE(c."customerType", 'RETAIL') AS channel,

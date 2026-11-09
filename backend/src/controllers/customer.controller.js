@@ -102,6 +102,9 @@ exports.remove = async (req, res, next) => {
   try {
     const customer = await Customer.findOne({ where: { id: req.params.id, userId: req.user.id }, transaction });
     if (!customer) throw new AppError('Không tìm thấy khách hàng', 404);
+    if (toNumber(customer.currentDebt) > 0) {
+      throw new AppError(`Khách hàng "${customer.name}" đang còn nợ ${toNumber(customer.currentDebt).toLocaleString('vi-VN')}đ. Vui lòng thu hết công nợ trước khi xóa!`);
+    }
     await Sale.update({ customerId: null }, { where: { customerId: customer.id, userId: req.user.id }, transaction });
     await customer.destroy({ transaction });
     await transaction.commit();

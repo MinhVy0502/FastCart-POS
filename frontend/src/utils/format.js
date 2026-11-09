@@ -22,3 +22,32 @@ export const getErrorMessage = (err, fallback = 'Có lỗi xảy ra') =>
   err?.response?.data?.message || (err?.message === 'Network Error' ? 'Không kết nối được máy chủ' : fallback);
 
 export const PAYMENT_LABELS = { CASH: 'Tiền mặt', TRANSFER: 'Chuyển khoản', DEBT: 'Ghi nợ' };
+
+/**
+ * Hiển thị quy đổi tồn kho trực quan theo quy cách đóng gói lớn nhất khả dụng.
+ * VD: currentStock = 52, baseUnit = 'Lon', units = [{ unitName: 'Thùng', conversionFactor: 24 }]
+ * => "2 Thùng + 4 Lon"
+ */
+export const formatStockBreakdown = (currentStock, baseUnit = 'Cái', units = []) => {
+  const stock = Number(currentStock) || 0;
+  if (stock <= 0 || !Array.isArray(units) || units.length === 0) return null;
+
+  const sorted = [...units]
+    .filter((u) => u && u.unitName && Number(u.conversionFactor) > 1)
+    .sort((a, b) => Number(b.conversionFactor) - Number(a.conversionFactor));
+
+  if (sorted.length === 0) return null;
+
+  const targetUnit = sorted.find((u) => stock >= Number(u.conversionFactor));
+  if (!targetUnit) return null;
+
+  const factor = Number(targetUnit.conversionFactor);
+  const whole = Math.floor(stock / factor);
+  const remainder = stock % factor;
+  const bUnit = baseUnit || 'Cái';
+
+  return remainder > 0
+    ? `${whole} ${targetUnit.unitName} + ${remainder} ${bUnit}`
+    : `${whole} ${targetUnit.unitName}`;
+};
+
