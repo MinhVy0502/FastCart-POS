@@ -315,6 +315,7 @@ html.dark .bg-white\/60 {
 html.dark .input,
 html.dark [class*="dark:bg-\[#1a2642\]"],
 html.dark input[type="text"],
+html.dark input[type="email"],
 html.dark input[type="search"],
 html.dark input[type="date"],
 html.dark input[type="number"],
