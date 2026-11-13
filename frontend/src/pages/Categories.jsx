@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Tags, Plus, Edit2, Trash2 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Tags, Plus, Edit2, Trash2, Package, Warehouse, Layers } from 'lucide-react';
 import api from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 import { PageHeader, Modal, EmptyState, SkeletonRows } from '../components/ui';
@@ -7,6 +8,7 @@ import { getErrorMessage } from '../utils/format';
 
 const Categories = () => {
   const { toast, confirm } = useToast();
+  const navigate = useNavigate();
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -96,6 +98,38 @@ const Categories = () => {
         }
       />
 
+      {/* Quick Navigation Pills for Mobile & Desktop */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        <button
+          type="button"
+          onClick={() => navigate('/products')}
+          className="px-3.5 py-2 rounded-2xl text-xs font-bold bg-white dark:bg-[#151f33] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-sky-400 flex items-center gap-1.5 shrink-0 transition-colors"
+        >
+          <Package size={15} className="text-sky-500" /> Sản phẩm & Giá
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/inventory')}
+          className="px-3.5 py-2 rounded-2xl text-xs font-bold bg-white dark:bg-[#151f33] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-sky-400 flex items-center gap-1.5 shrink-0 transition-colors"
+        >
+          <Warehouse size={15} className="text-amber-500" /> Tồn kho & Kiểm kê
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/categories')}
+          className="px-3.5 py-2 rounded-2xl text-xs font-bold bg-indigo-600 text-white shadow-sm shadow-indigo-500/20 flex items-center gap-1.5 shrink-0"
+        >
+          <Tags size={15} /> Danh mục ({categories.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/shelves')}
+          className="px-3.5 py-2 rounded-2xl text-xs font-bold bg-white dark:bg-[#151f33] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-sky-400 flex items-center gap-1.5 shrink-0 transition-colors"
+        >
+          <Layers size={15} className="text-emerald-500" /> Kệ hàng
+        </button>
+      </div>
+
       <div className="card p-5 sm:p-6 space-y-4">
         {loading ? (
           <SkeletonRows rows={5} cols={3} />
@@ -122,7 +156,7 @@ const Categories = () => {
                     <span className="w-8 h-8 rounded-xl bg-sky-50 text-sky-600 flex items-center justify-center font-bold text-xs">
                       <Tags size={16} />
                     </span>
-                    <div className="space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="space-x-1 opacity-100 md:opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => openModal(c)}
                         className="icon-btn text-amber-500 hover:bg-amber-50"

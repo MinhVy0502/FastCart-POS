@@ -3,11 +3,12 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Archive, ArrowDownRight, ArrowUpRight, RefreshCw, AlertCircle, 
   Search, SlidersHorizontal, Plus, Calendar, FileSpreadsheet, CheckCircle2,
-  Clock, ShoppingCart, AlertTriangle, ArrowRight, MapPin
+  Clock, ShoppingCart, AlertTriangle, ArrowRight, MapPin, Camera, Package, FolderTree, Layers
 } from 'lucide-react';
 import api from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 import { PageHeader, Modal, Pagination, EmptyState, SkeletonRows } from '../components/ui';
+import CameraScanner from '../components/CameraScanner';
 import { formatDate, formatStockBreakdown, getErrorMessage } from '../utils/format';
 
 const Inventory = () => {
@@ -46,6 +47,24 @@ const Inventory = () => {
   const [adjustReason, setAdjustReason] = useState('');
   const [adjustBatchId, setAdjustBatchId] = useState('');
   const [adjustSaving, setAdjustSaving] = useState(false);
+  const [scannerOpen, setScannerOpen] = useState(false);
+
+  const handleBarcodeStockCheck = async (code) => {
+    const raw = String(code || '').trim();
+    if (!raw) return;
+    try {
+      const res = await api.get(`/products/sku/${encodeURIComponent(raw)}`);
+      if (res.data?.data) {
+        setScannerOpen(false);
+        handleOpenAdjust(res.data.data);
+        toast.info(`Đang kiểm kê: ${res.data.data.name}`);
+      }
+    } catch {
+      setScannerOpen(false);
+      setStockSearch(raw);
+      toast.warning(`Không tìm thấy SP mã "${raw}", đã lọc theo từ khóa`);
+    }
+  };
 
   const fetchStock = async () => {
     try {
@@ -159,33 +178,74 @@ const Inventory = () => {
       <PageHeader
         icon={Archive}
         color="amber"
-        title="Quản lý kho hàng"
-        subtitle="Kiểm kê tồn kho, điều chỉnh số lượng thực tế và theo dõi thẻ kho chi tiết"
+        title="Quản lý kho & Kiểm kê"
+        subtitle="Kiểm kê tồn kho bằng Camera, điều chỉnh số lượng thực tế và theo dõi hạn sử dụng"
+        actions={
+          <button
+            type="button"
+            onClick={() => setScannerOpen(true)}
+            className="btn-primary bg-amber-500 hover:bg-amber-600 shadow-amber-500/20"
+          >
+            <Camera size={18} /> Quét mã kiểm kho
+          </button>
+        }
       />
 
-      <div className="card p-5 sm:p-6 space-y-4">
+      {/* Quick Navigation Pills for Mobile & Desktop */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        <button
+          type="button"
+          onClick={() => navigate('/products')}
+          className="px-3.5 py-2 rounded-2xl text-xs font-bold bg-white dark:bg-[#151f33] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-sky-400 flex items-center gap-1.5 shrink-0 transition-colors"
+        >
+          <Package size={15} className="text-sky-500" /> Sản phẩm & Giá
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/inventory')}
+          className="px-3.5 py-2 rounded-2xl text-xs font-bold bg-amber-500 text-white shadow-sm shadow-amber-500/20 flex items-center gap-1.5 shrink-0"
+        >
+          <Archive size={15} /> Tồn kho & Kiểm kê
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/categories')}
+          className="px-3.5 py-2 rounded-2xl text-xs font-bold bg-white dark:bg-[#151f33] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-sky-400 flex items-center gap-1.5 shrink-0 transition-colors"
+        >
+          <FolderTree size={15} className="text-indigo-500" /> Danh mục
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/shelves')}
+          className="px-3.5 py-2 rounded-2xl text-xs font-bold bg-white dark:bg-[#151f33] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-sky-400 flex items-center gap-1.5 shrink-0 transition-colors"
+        >
+          <Layers size={15} className="text-emerald-500" /> Kệ hàng
+        </button>
+      </div>
+
+      <div className="card p-4 sm:p-6 space-y-4">
         {/* Navigation Tabs */}
         <div className="flex justify-between items-center flex-wrap gap-3 pb-2 border-b border-slate-100">
-          <div className="flex bg-slate-100 p-1 rounded-xl">
+          <div className="flex bg-slate-100 dark:bg-slate-800 p-1 rounded-xl overflow-x-auto max-w-full">
             <button
               onClick={() => setTab('stock')}
-              className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${
-                tab === 'stock' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all shrink-0 ${
+                tab === 'stock' ? 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 shadow-sm' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
               Tồn kho hiện tại
             </button>
             <button
               onClick={() => setTab('history')}
-              className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all ${
-                tab === 'history' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all shrink-0 ${
+                tab === 'history' ? 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 shadow-sm' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
-              Thẻ kho (Lịch sử xuất nhập)
+              Thẻ kho (Lịch sử)
             </button>
             <button
               onClick={() => setTab('expiring')}
-              className={`px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-bold transition-all flex items-center gap-1.5 shrink-0 ${
                 tab === 'expiring' ? 'bg-amber-500 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'
               }`}
             >
@@ -215,15 +275,26 @@ const Inventory = () => {
         {/* TAB 1: CURRENT STOCK */}
         {tab === 'stock' && (
           <div className="space-y-4">
-            <div className="relative max-w-md">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
-              <input
-                type="text"
-                placeholder="Tìm sản phẩm theo tên, SKU, mã vạch..."
-                className="input pl-10"
-                value={stockSearch}
-                onChange={(e) => { setStockSearch(e.target.value); setStockPage(1); }}
-              />
+            <div className="flex items-center gap-2 max-w-lg">
+              <div className="relative flex-1">
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
+                <input
+                  type="text"
+                  placeholder="Tìm sản phẩm theo tên, SKU, mã vạch..."
+                  className="input pl-10"
+                  value={stockSearch}
+                  onChange={(e) => { setStockSearch(e.target.value); setStockPage(1); }}
+                />
+              </div>
+              <button
+                type="button"
+                onClick={() => setScannerOpen(true)}
+                className="btn-secondary py-2.5 px-3 text-xs font-bold text-amber-600 border-amber-200 bg-amber-50/60 shrink-0"
+                title="Quét mã vạch để kiểm kê ngay"
+              >
+                <Camera size={17} />
+                <span className="hidden sm:inline">Quét kiểm kho</span>
+              </button>
             </div>
 
             {stockLoading ? (
@@ -235,70 +306,117 @@ const Inventory = () => {
                 description="Thử thay đổi bộ lọc tìm kiếm hoặc thêm sản phẩm mới vào hệ thống."
               />
             ) : (
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse min-w-[700px]">
-                  <thead>
-                    <tr className="bg-slate-50/75 text-slate-500 text-xs uppercase tracking-wider">
-                      <th className="th">Mã SKU & Barcode</th>
-                      <th className="th">Sản phẩm</th>
-                      <th className="th text-center">Tối thiểu</th>
-                      <th className="th text-center">Tồn kho hiện tại</th>
-                      <th className="th">Tình trạng</th>
-                      <th className="th text-right">Thao tác</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 text-sm">
-                    {products.map((p) => {
-                      const isLow = p.currentStock <= p.minStock;
-                      return (
-                        <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
-                          <td className="td">
-                            <div className="font-mono font-bold text-slate-600">{p.sku}</div>
-                            {p.barcode && <div className="font-mono text-[11px] text-slate-400">{p.barcode}</div>}
-                          </td>
-                          <td className="td">
-                            <p className="font-bold text-slate-800">{p.name}</p>
-                            <p className="text-xs text-slate-400">{p.category?.name || 'Không có danh mục'}</p>
-                          </td>
-                          <td className="td text-center text-slate-500">{p.minStock} {p.unit || 'Cái'}</td>
-                          <td className="td text-center">
-                            <div className="flex flex-col items-center gap-0.5">
-                              <span className={`text-base font-extrabold ${isLow ? 'text-rose-600' : 'text-emerald-600'}`}>
-                                {p.currentStock} {p.unit || 'Cái'}
-                              </span>
-                              {formatStockBreakdown(p.currentStock, p.unit, p.units) && (
-                                <span className="text-[11px] font-semibold text-sky-600 dark:text-sky-400 bg-sky-50/80 dark:bg-sky-950/40 px-1.5 py-0.2 rounded">
-                                  ≈ {formatStockBreakdown(p.currentStock, p.unit, p.units)}
-                                </span>
-                              )}
-                            </div>
-                          </td>
-                          <td className="td">
-                            {isLow ? (
-                              <span className="chip bg-rose-50 text-rose-600 font-bold">
-                                <AlertCircle size={13} /> Sắp hết hàng
-                              </span>
-                            ) : (
-                              <span className="chip bg-emerald-50 text-emerald-600 font-bold">
-                                An toàn
+              <>
+                {/* Mobile Card List (< 768px) */}
+                <div className="md:hidden space-y-2.5">
+                  {products.map((p) => {
+                    const isLow = p.currentStock <= p.minStock;
+                    const breakdown = formatStockBreakdown(p.currentStock, p.unit, p.units);
+                    return (
+                      <div
+                        key={p.id}
+                        onClick={() => handleOpenAdjust(p)}
+                        className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/60 dark:bg-slate-800/40 flex items-center justify-between gap-3 active:scale-[0.99] transition-all cursor-pointer"
+                      >
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5 mb-0.5">
+                            <span className="font-mono text-[11px] font-bold text-slate-400">{p.barcode || p.sku}</span>
+                            {isLow && (
+                              <span className="chip text-[10px] py-0.2 px-1.5 bg-rose-50 text-rose-600 font-bold">
+                                Sắp hết (Min: {p.minStock})
                               </span>
                             )}
-                          </td>
-                          <td className="td text-right">
-                            <button
-                              onClick={() => handleOpenAdjust(p)}
-                              className="btn-secondary py-1.5 px-3 text-xs font-bold text-amber-600 hover:text-amber-700"
-                              title="Kiểm kê / Điều chỉnh tồn kho thực tế"
-                            >
-                              <SlidersHorizontal size={14} /> Kiểm kê
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+                          </div>
+                          <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm leading-snug">{p.name}</h4>
+                          {breakdown && (
+                            <p className="text-[11px] font-semibold text-sky-600 dark:text-sky-400 mt-0.5">
+                              ≈ {breakdown}
+                            </p>
+                          )}
+                        </div>
+                        <div className="text-right shrink-0 flex flex-col items-end gap-1.5">
+                          <span className={`text-base font-black ${isLow ? 'text-rose-600' : 'text-emerald-600'}`}>
+                            {p.currentStock} {p.unit || 'Cái'}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); handleOpenAdjust(p); }}
+                            className="btn-secondary py-1 px-2.5 text-xs font-bold text-amber-600 bg-white dark:bg-slate-800"
+                          >
+                            <SlidersHorizontal size={13} /> Kiểm kê
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {/* Desktop Table (>= 768px) */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-left border-collapse min-w-[700px]">
+                    <thead>
+                      <tr className="bg-slate-50/75 text-slate-500 text-xs uppercase tracking-wider">
+                        <th className="th">Mã SKU & Barcode</th>
+                        <th className="th">Sản phẩm</th>
+                        <th className="th text-center">Tối thiểu</th>
+                        <th className="th text-center">Tồn kho hiện tại</th>
+                        <th className="th">Tình trạng</th>
+                        <th className="th text-right">Thao tác</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 text-sm">
+                      {products.map((p) => {
+                        const isLow = p.currentStock <= p.minStock;
+                        return (
+                          <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
+                            <td className="td">
+                              <div className="font-mono font-bold text-slate-600">{p.sku}</div>
+                              {p.barcode && <div className="font-mono text-[11px] text-slate-400">{p.barcode}</div>}
+                            </td>
+                            <td className="td">
+                              <p className="font-bold text-slate-800">{p.name}</p>
+                              <p className="text-xs text-slate-400">{p.category?.name || 'Không có danh mục'}</p>
+                            </td>
+                            <td className="td text-center text-slate-500">{p.minStock} {p.unit || 'Cái'}</td>
+                            <td className="td text-center">
+                              <div className="flex flex-col items-center gap-0.5">
+                                <span className={`text-base font-extrabold ${isLow ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                  {p.currentStock} {p.unit || 'Cái'}
+                                </span>
+                                {formatStockBreakdown(p.currentStock, p.unit, p.units) && (
+                                  <span className="text-[11px] font-semibold text-sky-600 dark:text-sky-400 bg-sky-50/80 dark:bg-sky-950/40 px-1.5 py-0.2 rounded">
+                                    ≈ {formatStockBreakdown(p.currentStock, p.unit, p.units)}
+                                  </span>
+                                )}
+                              </div>
+                            </td>
+                            <td className="td">
+                              {isLow ? (
+                                <span className="chip bg-rose-50 text-rose-600 font-bold">
+                                  <AlertCircle size={13} /> Sắp hết hàng
+                                </span>
+                              ) : (
+                                <span className="chip bg-emerald-50 text-emerald-600 font-bold">
+                                  An toàn
+                                </span>
+                              )}
+                            </td>
+                            <td className="td text-right">
+                              <button
+                                onClick={() => handleOpenAdjust(p)}
+                                className="btn-secondary py-1.5 px-3 text-xs font-bold text-amber-600 hover:text-amber-700"
+                                title="Kiểm kê / Điều chỉnh tồn kho thực tế"
+                              >
+                                <SlidersHorizontal size={14} /> Kiểm kê
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
 
             <Pagination pagination={stockPagination} onChange={setStockPage} />
@@ -625,10 +743,32 @@ const Inventory = () => {
                 value={adjustReason}
                 onChange={(e) => setAdjustReason(e.target.value)}
               />
+              <div className="flex flex-wrap gap-1.5 mt-2">
+                {['Kiểm đếm thực tế cuối ngày', 'Hàng hỏng / vỡ bao bì', 'Hàng hết hạn hủy bỏ', 'Cập nhật tồn đầu kỳ'].map((r) => (
+                  <button
+                    key={r}
+                    type="button"
+                    onClick={() => setAdjustReason(r)}
+                    className={`text-[11px] px-2.5 py-1 rounded-lg font-semibold border transition-colors ${
+                      adjustReason === r
+                        ? 'bg-amber-500 text-white border-amber-500'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:border-amber-400'
+                    }`}
+                  >
+                    {r}
+                  </button>
+                ))}
+              </div>
             </div>
           </form>
         )}
       </Modal>
+
+      <CameraScanner
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        onDetected={handleBarcodeStockCheck}
+      />
     </div>
   );
 };

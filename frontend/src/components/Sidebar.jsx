@@ -24,16 +24,24 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
   const navigate = useNavigate();
   
   const menuItems = [
-    { name: 'Tổng quan', path: '/dashboard', icon: LayoutDashboard },
     { name: 'Bán hàng (POS)', path: '/sales', icon: ShoppingCart },
-    { name: 'Sản phẩm', path: '/products', icon: Package },
+    { name: 'Hàng hóa', path: '/products', icon: Package },
+    { name: 'Kho & Kiểm kê', path: '/inventory', icon: Box },
+    { name: 'Nhập hàng', path: '/purchases', icon: Truck },
+    { name: 'Sổ nợ Khách / Sỉ', path: '/customers', icon: Users },
+    { name: 'Nhà cung cấp', path: '/suppliers', icon: Building2 },
+    { name: 'Tổng quan', path: '/dashboard', icon: LayoutDashboard },
+    { name: 'Báo cáo lãi lỗ', path: '/reports', icon: FileText },
     { name: 'Danh mục', path: '/categories', icon: Tags },
     { name: 'Kệ hàng', path: '/shelves', icon: Layers },
-    { name: 'Kho hàng', path: '/inventory', icon: Box },
-    { name: 'Nhập hàng', path: '/purchases', icon: Truck },
-    { name: 'Khách hàng', path: '/customers', icon: Users },
-    { name: 'Nhà cung cấp', path: '/suppliers', icon: Building2 },
-    { name: 'Báo cáo', path: '/reports', icon: FileText },
+  ];
+
+  const bottomNavItems = [
+    { name: 'Bán hàng', path: '/sales', icon: ShoppingCart },
+    { name: 'Hàng hóa', path: '/products', icon: Package },
+    { name: 'Sổ nợ', path: '/customers', icon: Users },
+    { name: 'Nhập kho', path: '/purchases', icon: Truck },
+    { name: 'Tổng quan', path: '/dashboard', icon: LayoutDashboard },
   ];
 
   const handleNavClick = () => {
@@ -140,6 +148,35 @@ const Sidebar = ({ isOpen, setIsOpen }) => {
           </button>
         </div>
       </aside>
+
+      {/* Mobile Bottom Navigation Bar (5 trụ cột trong tầm ngón cái) */}
+      <nav className="md:hidden fixed bottom-0 inset-x-0 z-30 bg-white/95 dark:bg-[#0c1322]/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800/80 px-1 py-1 flex items-center justify-around shadow-[0_-4px_20px_-4px_rgba(0,0,0,0.08)] select-none">
+        {bottomNavItems.map((item) => {
+          const Icon = item.icon;
+          return (
+            <NavLink
+              key={item.path}
+              to={item.path}
+              className={({ isActive }) =>
+                `flex flex-col items-center justify-center py-1.5 px-2 rounded-2xl min-w-[60px] transition-all ${
+                  isActive
+                    ? 'text-sky-500 dark:text-sky-400 font-extrabold scale-105'
+                    : 'text-slate-500 dark:text-slate-400 font-medium hover:text-slate-800'
+                }`
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <div className={`p-1 rounded-xl transition-colors ${isActive ? 'bg-sky-50 dark:bg-sky-950/60' : ''}`}>
+                    <Icon size={20} className={isActive ? 'stroke-[2.5]' : 'stroke-[1.8]'} />
+                  </div>
+                  <span className="text-[10px] leading-tight mt-0.5 truncate">{item.name}</span>
+                </>
+              )}
+            </NavLink>
+          );
+        })}
+      </nav>
     </>
   );
 };

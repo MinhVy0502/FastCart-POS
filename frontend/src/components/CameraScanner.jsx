@@ -37,7 +37,7 @@ const playBeep = () => {
   }
 };
 
-const CameraScanner = ({ onScan, onClose, title = 'Quét mã vạch & QR Code' }) => {
+const CameraScannerInner = ({ onScan, onClose, title = 'Quét mã vạch & QR Code' }) => {
   const [cameras, setCameras] = useState([]);
   const [currentCameraIndex, setCurrentCameraIndex] = useState(0);
   const [isStarting, setIsStarting] = useState(true);
@@ -425,6 +425,11 @@ const CameraScanner = ({ onScan, onClose, title = 'Quét mã vạch & QR Code' }
   );
 
   return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : null;
+};
+
+const CameraScanner = ({ open = true, onScan, onDetected, onClose, title }) => {
+  if (!open) return null;
+  return <CameraScannerInner onScan={onScan || onDetected} onClose={onClose} title={title} />;
 };
 
 export default CameraScanner;

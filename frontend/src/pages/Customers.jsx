@@ -1,9 +1,9 @@
 import { useState, useEffect } from 'react';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { 
   Users, Plus, Search, Edit2, Trash2, Phone, Mail, MapPin, 
   ShoppingBag, History, Store, CreditCard, DollarSign, AlertTriangle, 
-  ArrowUpRight, ArrowDownLeft, CheckCircle2, ChevronRight, FileText
+  ArrowUpRight, ArrowDownLeft, CheckCircle2, ChevronRight, FileText, Building2
 } from 'lucide-react';
 import api from '../services/api';
 import { useToast } from '../contexts/ToastContext';
@@ -13,6 +13,7 @@ import { formatCurrency, formatDate, getErrorMessage } from '../utils/format';
 const Customers = () => {
   const { toast, confirm } = useToast();
   const location = useLocation();
+  const navigate = useNavigate();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState(null);
@@ -23,8 +24,13 @@ const Customers = () => {
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const qSearch = params.get('search');
+    const qFilter = params.get('filter');
     if (qSearch !== null) {
       setSearch(qSearch);
+      setPage(1);
+    }
+    if (qFilter === 'DEBT' || qFilter === 'WHOLESALE') {
+      setFilterType(qFilter);
       setPage(1);
     }
   }, [location.search]);
@@ -201,7 +207,7 @@ const Customers = () => {
       <PageHeader
         icon={Users}
         color="sky"
-        title="Quản lý khách hàng & Đại lý"
+        title="Sổ nợ & Khách hàng"
         subtitle="Quản lý danh bạ khách lẻ, tiệm tạp hóa mua sỉ, hạn mức nợ và thu hồi công nợ"
         actions={
           <button onClick={handleOpenCreate} className="btn-primary">
@@ -210,9 +216,27 @@ const Customers = () => {
         }
       />
 
-      <div className="card p-5 sm:p-6 space-y-4">
+      {/* Quick Switcher between Customer Receivable & Supplier Payable */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        <button
+          type="button"
+          onClick={() => navigate('/customers')}
+          className="px-4 py-2 rounded-2xl text-xs font-bold bg-sky-500 text-white shadow-sm shadow-sky-500/20 flex items-center gap-1.5 shrink-0"
+        >
+          <Users size={15} /> Khách hàng & Đại lý (Phải thu)
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/suppliers')}
+          className="px-4 py-2 rounded-2xl text-xs font-bold bg-white dark:bg-[#151f33] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-indigo-400 flex items-center gap-1.5 shrink-0 transition-colors"
+        >
+          <Building2 size={15} className="text-indigo-500" /> Nhà cung cấp (Nợ phải trả)
+        </button>
+      </div>
+
+      <div className="card p-4 sm:p-6 space-y-4">
         {/* Toolbar & Filters */}
-        <div className="flex flex-col lg:flex-row gap-4 justify-between items-start lg:items-center">
+        <div className="flex flex-col lg:flex-row gap-3 justify-between items-start lg:items-center">
           <div className="relative w-full sm:max-w-md">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input
@@ -225,38 +249,38 @@ const Customers = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 w-full lg:w-auto">
-            <div className="bg-slate-100 p-1 rounded-xl flex items-center text-xs font-semibold">
+            <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex items-center text-xs font-semibold overflow-x-auto max-w-full">
               <button
                 type="button"
                 onClick={() => { setFilterType('ALL'); setPage(1); }}
-                className={`px-3 py-1.5 rounded-lg transition-all ${filterType === 'ALL' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`px-3 py-1.5 rounded-lg transition-all shrink-0 ${filterType === 'ALL' ? 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
               >
                 Tất cả
               </button>
               <button
                 type="button"
+                onClick={() => { setFilterType('DEBT'); setPage(1); }}
+                className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 shrink-0 ${filterType === 'DEBT' ? 'bg-rose-500 text-white shadow-sm' : 'text-slate-500 hover:text-rose-500'}`}
+              >
+                <CreditCard size={13} /> Đang nợ
+              </button>
+              <button
+                type="button"
                 onClick={() => { setFilterType('WHOLESALE'); setPage(1); }}
-                className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 ${filterType === 'WHOLESALE' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-indigo-600'}`}
+                className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 shrink-0 ${filterType === 'WHOLESALE' ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-indigo-600'}`}
               >
                 <Store size={13} /> Đại lý / Sỉ
               </button>
               <button
                 type="button"
                 onClick={() => { setFilterType('RETAIL'); setPage(1); }}
-                className={`px-3 py-1.5 rounded-lg transition-all ${filterType === 'RETAIL' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`px-3 py-1.5 rounded-lg transition-all shrink-0 ${filterType === 'RETAIL' ? 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
               >
                 Khách lẻ
               </button>
-              <button
-                type="button"
-                onClick={() => { setFilterType('DEBT'); setPage(1); }}
-                className={`px-3 py-1.5 rounded-lg transition-all flex items-center gap-1 ${filterType === 'DEBT' ? 'bg-rose-500 text-white shadow-sm' : 'text-slate-500 hover:text-rose-500'}`}
-              >
-                <CreditCard size={13} /> Đang nợ
-              </button>
             </div>
 
-            <span className="text-xs text-slate-400 font-medium whitespace-nowrap ml-auto">
+            <span className="text-xs text-slate-400 font-medium whitespace-nowrap ml-auto hidden sm:inline">
               {pagination?.total ? `Tổng ${pagination.total} khách` : ''}
             </span>
           </div>
@@ -277,132 +301,234 @@ const Customers = () => {
             }
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[850px]">
-              <thead>
-                <tr className="bg-slate-50/75 text-slate-500 text-xs uppercase tracking-wider">
-                  <th className="th">Khách hàng / Tiệm tạp hóa</th>
-                  <th className="th">Phân loại</th>
-                  <th className="th">Liên hệ & Địa chỉ</th>
-                  <th className="th text-right">Tổng chi tiêu</th>
-                  <th className="th text-right">Công nợ hiện tại</th>
-                  <th className="th text-right">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-sm">
-                {customers.map((c) => {
-                  const debt = Number(c.currentDebt) || 0;
-                  const limit = Number(c.debtLimit) || 0;
-                  const isExceeded = limit > 0 && debt > limit;
-                  const isWholesale = c.customerType === 'WHOLESALE';
+          <>
+            {/* Mobile Card List (< 768px) */}
+            <div className="md:hidden space-y-2.5">
+              {customers.map((c) => {
+                const debt = Number(c.currentDebt) || 0;
+                const limit = Number(c.debtLimit) || 0;
+                const isExceeded = limit > 0 && debt > limit;
+                const isWholesale = c.customerType === 'WHOLESALE';
 
-                  return (
-                    <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="td font-bold text-slate-800">
-                        <div className="flex items-center gap-3">
-                          <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-bold text-sm shrink-0 ${isWholesale ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-sky-50 text-sky-600'}`}>
-                            {isWholesale ? <Store size={20} /> : c.name.substring(0, 2).toUpperCase()}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <p className="font-bold text-slate-800">{c.name}</p>
-                            </div>
-                            {c.storeName ? (
-                              <p className="text-xs text-indigo-600 font-semibold flex items-center gap-1 mt-0.5">
-                                <Store size={12} /> {c.storeName}
-                              </p>
-                            ) : (
-                              c.email && <p className="text-xs text-slate-400 flex items-center gap-1"><Mail size={12} /> {c.email}</p>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="td">
-                        {isWholesale ? (
-                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-600 border border-indigo-100">
-                            <Store size={12} /> Đại lý / Sỉ
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">
-                            Khách lẻ
-                          </span>
-                        )}
-                      </td>
-                      <td className="td text-slate-600 text-xs">
-                        <div className="space-y-1">
-                          {c.phone ? (
-                            <span className="flex items-center gap-1.5 font-medium text-slate-700">
-                              <Phone size={13} className="text-slate-400" /> {c.phone}
+                return (
+                  <div
+                    key={c.id}
+                    onClick={() => handleViewHistory(c, debt > 0 ? 'debts' : 'sales')}
+                    className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/60 dark:bg-slate-800/40 space-y-2.5 active:scale-[0.99] transition-all cursor-pointer"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-bold text-slate-800 dark:text-slate-100 text-sm">{c.name}</span>
+                          {isWholesale ? (
+                            <span className="chip text-[10px] py-0.2 px-1.5 bg-indigo-50 text-indigo-600 font-bold">
+                              Đại lý / Sỉ
                             </span>
                           ) : (
-                            <span className="text-slate-300 italic">Chưa có SĐT</span>
-                          )}
-                          {c.address && (
-                            <span className="flex items-center gap-1 text-slate-500 truncate max-w-xs" title={c.address}>
-                              <MapPin size={12} className="text-slate-400 shrink-0" /> {c.address}
+                            <span className="chip text-[10px] py-0.2 px-1.5 bg-slate-100 text-slate-600">
+                              Khách lẻ
                             </span>
                           )}
                         </div>
-                      </td>
-                      <td className="td text-right font-bold text-emerald-600">
-                        {formatCurrency(c.totalSpent || 0)}
-                        <p className="text-[11px] text-slate-400 font-normal">{c.orderCount || 0} đơn hàng</p>
-                      </td>
-                      <td className="td text-right">
-                        {debt > 0 ? (
-                          <div>
-                            <span className="font-black text-rose-600 text-sm">
-                              {formatCurrency(debt)}
-                            </span>
-                            {limit > 0 && (
-                              <p className={`text-[11px] font-medium mt-0.5 ${isExceeded ? 'text-rose-600 font-bold flex items-center justify-end gap-1' : 'text-slate-400'}`}>
-                                {isExceeded && <AlertTriangle size={11} />}
-                                Hạn mức: {formatCurrency(limit)}
-                              </p>
-                            )}
-                          </div>
-                        ) : (
-                          <span className="text-xs text-slate-400 font-medium">0₫ (Không nợ)</span>
+                        {c.storeName && (
+                          <p className="text-xs text-indigo-600 font-semibold flex items-center gap-1 mt-0.5">
+                            <Store size={12} /> {c.storeName}
+                          </p>
                         )}
-                      </td>
-                      <td className="td text-right space-x-1">
+                        <div className="flex items-center gap-3 mt-1 text-xs text-slate-500" onClick={(e) => e.stopPropagation()}>
+                          {c.phone ? (
+                            <a href={`tel:${c.phone}`} className="inline-flex items-center gap-1 font-semibold text-sky-600 hover:underline">
+                              <Phone size={12} /> {c.phone}
+                            </a>
+                          ) : (
+                            <span className="text-slate-400 italic text-[11px]">Chưa có SĐT</span>
+                          )}
+                          {c.address && (
+                            <span className="truncate max-w-[160px] text-[11px] text-slate-400">· {c.address}</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span className="text-[10px] text-slate-400 block">Công nợ hiện tại</span>
+                        <span className={`font-black text-base ${debt > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                          {debt > 0 ? formatCurrency(debt) : '0₫'}
+                        </span>
+                        {isExceeded && (
+                          <span className="text-[10px] text-rose-500 font-bold block">Vượt hạn mức!</span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-200/70 dark:border-slate-700/60" onClick={(e) => e.stopPropagation()}>
+                      <span className="text-[11px] text-slate-400">
+                        Đã mua: <b className="text-slate-700 dark:text-slate-200">{formatCurrency(c.totalSpent || 0)}</b> ({c.orderCount || 0} đơn)
+                      </span>
+                      <div className="flex items-center gap-1.5">
                         {debt > 0 && (
                           <button
                             onClick={() => handleOpenPayDebt(c)}
-                            className="btn-sm bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 inline-flex items-center gap-1 font-bold text-xs px-2.5 py-1.5 rounded-xl transition-all"
-                            title="Thu tiền nợ"
+                            className="px-3 py-1.5 rounded-xl bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-sm shadow-emerald-500/20"
                           >
-                            <DollarSign size={14} /> Thu nợ
+                            <DollarSign size={13} /> Thu nợ
                           </button>
                         )}
                         <button
                           onClick={() => handleViewHistory(c, debt > 0 ? 'debts' : 'sales')}
-                          className="icon-btn text-sky-500 hover:bg-sky-50"
-                          title="Lịch sử mua & sổ công nợ"
+                          className="icon-btn text-sky-500 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                          title="Sổ nợ & Lịch sử"
                         >
-                          <History size={17} />
+                          <History size={15} />
                         </button>
                         <button
                           onClick={() => handleOpenEdit(c)}
-                          className="icon-btn text-amber-500 hover:bg-amber-50"
-                          title="Chỉnh sửa thông tin"
+                          className="icon-btn text-amber-500 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                          title="Sửa"
                         >
-                          <Edit2 size={17} />
+                          <Edit2 size={15} />
                         </button>
                         <button
                           onClick={() => handleDelete(c)}
-                          className="icon-btn text-rose-500 hover:bg-rose-50"
-                          title="Xóa khách hàng"
+                          className="icon-btn text-rose-500 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                          title="Xóa"
                         >
-                          <Trash2 size={17} />
+                          <Trash2 size={15} />
                         </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop Table (>= 768px) */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[850px]">
+                <thead>
+                  <tr className="bg-slate-50/75 text-slate-500 text-xs uppercase tracking-wider">
+                    <th className="th">Khách hàng / Tiệm tạp hóa</th>
+                    <th className="th">Phân loại</th>
+                    <th className="th">Liên hệ & Địa chỉ</th>
+                    <th className="th text-right">Tổng chi tiêu</th>
+                    <th className="th text-right">Công nợ hiện tại</th>
+                    <th className="th text-right">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
+                  {customers.map((c) => {
+                    const debt = Number(c.currentDebt) || 0;
+                    const limit = Number(c.debtLimit) || 0;
+                    const isExceeded = limit > 0 && debt > limit;
+                    const isWholesale = c.customerType === 'WHOLESALE';
+
+                    return (
+                      <tr key={c.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="td font-bold text-slate-800">
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-2xl flex items-center justify-center font-bold text-sm shrink-0 ${isWholesale ? 'bg-indigo-50 text-indigo-600 border border-indigo-100' : 'bg-sky-50 text-sky-600'}`}>
+                              {isWholesale ? <Store size={20} /> : c.name.substring(0, 2).toUpperCase()}
+                            </div>
+                            <div>
+                              <div className="flex items-center gap-1.5">
+                                <p className="font-bold text-slate-800">{c.name}</p>
+                              </div>
+                              {c.storeName ? (
+                                <p className="text-xs text-indigo-600 font-semibold flex items-center gap-1 mt-0.5">
+                                  <Store size={12} /> {c.storeName}
+                                </p>
+                              ) : (
+                                c.email && <p className="text-xs text-slate-400 flex items-center gap-1"><Mail size={12} /> {c.email}</p>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="td">
+                          {isWholesale ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-indigo-50 text-indigo-600 border border-indigo-100">
+                              <Store size={12} /> Đại lý / Sỉ
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-slate-100 text-slate-600">
+                              Khách lẻ
+                            </span>
+                          )}
+                        </td>
+                        <td className="td text-slate-600 text-xs">
+                          <div className="space-y-1">
+                            {c.phone ? (
+                              <a href={`tel:${c.phone}`} className="flex items-center gap-1.5 font-medium text-sky-600 hover:underline">
+                                <Phone size={13} className="text-slate-400" /> {c.phone}
+                              </a>
+                            ) : (
+                              <span className="text-slate-300 italic">Chưa có SĐT</span>
+                            )}
+                            {c.address && (
+                              <span className="flex items-center gap-1 text-slate-500 truncate max-w-xs" title={c.address}>
+                                <MapPin size={12} className="text-slate-400 shrink-0" /> {c.address}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="td text-right font-bold text-emerald-600">
+                          {formatCurrency(c.totalSpent || 0)}
+                          <p className="text-[11px] text-slate-400 font-normal">{c.orderCount || 0} đơn hàng</p>
+                        </td>
+                        <td className="td text-right">
+                          {debt > 0 ? (
+                            <div>
+                              <span className="font-black text-rose-600 text-sm">
+                                {formatCurrency(debt)}
+                              </span>
+                              {limit > 0 && (
+                                <p className={`text-[11px] font-medium mt-0.5 ${isExceeded ? 'text-rose-600 font-bold flex items-center justify-end gap-1' : 'text-slate-400'}`}>
+                                  {isExceeded && <AlertTriangle size={11} />}
+                                  Hạn mức: {formatCurrency(limit)}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-slate-400 font-medium">0₫ (Không nợ)</span>
+                          )}
+                        </td>
+                        <td className="td text-right space-x-1">
+                          {debt > 0 && (
+                            <button
+                              onClick={() => handleOpenPayDebt(c)}
+                              className="btn-sm bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 inline-flex items-center gap-1 font-bold text-xs px-2.5 py-1.5 rounded-xl transition-all"
+                              title="Thu tiền nợ"
+                            >
+                              <DollarSign size={14} /> Thu nợ
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleViewHistory(c, debt > 0 ? 'debts' : 'sales')}
+                            className="icon-btn text-sky-500 hover:bg-sky-50"
+                            title="Lịch sử mua & sổ công nợ"
+                          >
+                            <History size={17} />
+                          </button>
+                          <button
+                            onClick={() => handleOpenEdit(c)}
+                            className="icon-btn text-amber-500 hover:bg-amber-50"
+                            title="Chỉnh sửa thông tin"
+                          >
+                            <Edit2 size={17} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(c)}
+                            className="icon-btn text-rose-500 hover:bg-rose-50"
+                            title="Xóa khách hàng"
+                          >
+                            <Trash2 size={17} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
 
         <Pagination pagination={pagination} onChange={setPage} />

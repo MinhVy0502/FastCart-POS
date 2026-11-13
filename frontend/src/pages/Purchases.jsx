@@ -398,7 +398,7 @@ const Purchases = () => {
 
               {/* Suggestions dropdown */}
               {searchProduct.trim() && (
-                <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-[#151f33] rounded-2xl shadow-xl border border-slate-100 dark:border-slate-800 py-2 z-20 max-h-60 overflow-y-auto">
+                <div className="absolute top-full left-0 right-0 mt-2 bg-white dark:bg-[#151f33] rounded-2xl shadow-xl border border-slate-100 dark:border-slate-800 py-2 z-20 max-h-72 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800">
                   {filteredProducts.length === 0 ? (
                     <div className="p-4 text-center text-xs text-slate-400">Không tìm thấy sản phẩm</div>
                   ) : (
@@ -406,17 +406,33 @@ const Purchases = () => {
                       <div
                         key={p.id}
                         onClick={() => handleAddToCart(p)}
-                        className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 flex justify-between items-center cursor-pointer transition-colors"
+                        className="p-3 hover:bg-slate-50 dark:hover:bg-slate-800/60 flex justify-between items-center gap-2 cursor-pointer transition-colors"
                       >
-                        <div>
+                        <div className="min-w-0">
                           <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">{p.name}</p>
                           <p className="text-xs text-slate-400 font-mono">
                             SKU: {p.sku}
                             {p.barcode && <span className="ml-1 text-sky-500">· {p.barcode}</span>}
                             <span className="ml-1 font-sans text-slate-500">· Tồn: {p.currentStock} {p.unit || 'Cái'}</span>
                           </p>
+                          {p.units && p.units.length > 0 && (
+                            <div className="flex flex-wrap gap-1 mt-1.5" onClick={(e) => e.stopPropagation()}>
+                              {p.units.map((u) => (
+                                <button
+                                  key={u.id || u.unitName}
+                                  type="button"
+                                  onClick={() => handleAddToCart(p, u)}
+                                  className="text-[10px] font-bold px-2 py-0.5 rounded-lg bg-sky-50 dark:bg-sky-950/60 text-sky-700 dark:text-sky-300 border border-sky-200 dark:border-sky-800 hover:bg-sky-500 hover:text-white"
+                                >
+                                  + Nhập theo {u.unitName} ({u.conversionFactor} {p.unit})
+                                </button>
+                              ))}
+                            </div>
+                          )}
                         </div>
-                        <span className="font-bold text-sky-600 text-sm">{formatCurrency(p.importPrice)}</span>
+                        <span className="font-bold text-sky-600 text-xs sm:text-sm shrink-0">
+                          {formatCurrency(p.importPrice)}/{p.unit || 'Cái'}
+                        </span>
                       </div>
                     ))
                   )}
@@ -424,118 +440,244 @@ const Purchases = () => {
               )}
             </div>
 
-            {/* Cart Table */}
-            <div className="overflow-x-auto min-h-[220px]">
+            {/* Cart Items (Mobile Cards + Desktop Table) */}
+            <div className="min-h-[220px]">
               {cart.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-12 text-slate-300">
                   <Package size={40} className="mb-2 stroke-1" />
                   <p className="text-sm font-medium">Chưa có sản phẩm nào được chọn</p>
-                  <p className="text-xs text-slate-400 mt-1">Tìm kiếm sản phẩm ở trên hoặc quét mã vạch</p>
+                  <p className="text-xs text-slate-400 mt-1">Tìm kiếm sản phẩm ở trên hoặc bấm Quét mã vạch</p>
                 </div>
               ) : (
-                <table className="w-full text-left border-collapse text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 text-xs uppercase">
-                      <th className="py-2.5">Sản phẩm</th>
-                      <th className="py-2.5 text-center w-28">Số lượng nhập</th>
-                      <th className="py-2.5 text-right w-36">Giá nhập</th>
-                      <th className="py-2.5 text-right w-36">Thành tiền</th>
-                      <th className="py-2.5 text-right w-10"></th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                <>
+                  {/* Mobile Cart List (< 768px) */}
+                  <div className="md:hidden space-y-2.5">
                     {cart.map((item, cIdx) => (
-                      <tr key={`${item.productId}-${item.unitName || item.unit}-${cIdx}`}>
-                        <td className="py-3">
-                          <p className="font-bold text-slate-800 dark:text-slate-100">{item.name}</p>
-                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                            <span className="text-xs text-slate-400 font-mono">
-                              {item.sku}
-                              {item.barcode && <span className="ml-1 text-sky-500">· {item.barcode}</span>}
-                            </span>
-
-                            {item.units && item.units.length > 0 && (
-                              <select
-                                className="bg-slate-100 dark:bg-slate-800 text-[11px] font-bold text-sky-600 dark:text-sky-400 rounded-lg border border-slate-200 dark:border-slate-700 py-0.5 px-1.5 focus:outline-none"
-                                value={item.unitName}
-                                onChange={(e) => handleChangePurchaseUnit(item.productId, item.unitName, e.target.value)}
-                              >
-                                <option value={item.baseUnit}>{item.baseUnit} (Gốc)</option>
-                                {item.units.map(u => (
-                                  <option key={u.id || u.unitName} value={u.unitName}>
-                                    {u.unitName} (x{u.conversionFactor} {item.baseUnit})
-                                  </option>
-                                ))}
-                              </select>
-                            )}
+                      <div
+                        key={`${item.productId}-${item.unitName || item.unit}-${cIdx}`}
+                        className="p-3 rounded-2xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/70 dark:bg-slate-800/40 space-y-2.5"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="font-bold text-slate-800 dark:text-slate-100 text-sm">{item.name}</p>
+                            <span className="text-[11px] text-slate-400 font-mono">{item.barcode || item.sku}</span>
                           </div>
-
-                          {item.hasExpiryDate && (
-                            <div className="mt-2 flex items-center gap-2 flex-wrap text-xs bg-amber-50/70 dark:bg-amber-950/30 p-1.5 rounded-lg border border-amber-200/50 dark:border-amber-800/40">
-                              <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 shrink-0">
-                                Lô & HSD:
-                              </span>
-                              <input
-                                type="text"
-                                placeholder="Số lô (VD: LOT-01)..."
-                                className="input py-0.5 px-2 text-xs font-mono w-28 bg-white dark:bg-slate-800"
-                                value={item.batchNumber}
-                                onChange={(e) => setCartItemField(item.productId, 'batchNumber', e.target.value, item.unitName)}
-                              />
-                              <input
-                                type="date"
-                                className="input py-0.5 px-2 text-xs w-32 bg-white dark:bg-slate-800"
-                                value={item.expiryDate}
-                                onChange={(e) => setCartItemField(item.productId, 'expiryDate', e.target.value, item.unitName)}
-                              />
-                            </div>
-                          )}
-                        </td>
-                        <td className="py-3 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => updateCartQty(item.productId, -1, item.unitName)}
-                              className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold text-sm"
-                            >
-                              -
-                            </button>
-                            <input
-                              type="number"
-                              min="1"
-                              className="w-12 text-center font-bold text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg py-1"
-                              value={item.quantity}
-                              onChange={(e) => setCartItemField(item.productId, 'quantity', e.target.value, item.unitName)}
-                            />
-                            <button
-                              type="button"
-                              onClick={() => updateCartQty(item.productId, 1, item.unitName)}
-                              className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold text-sm"
-                            >
-                              +
-                            </button>
-                            <span className="text-xs text-slate-400 font-medium ml-1">{item.unitName || item.unit || 'Cái'}</span>
-                          </div>
-                        </td>
-                        <td className="py-3 text-right">
-                          <MoneyInput
-                            className="input py-1 px-2 text-right font-semibold text-xs"
-                            value={item.price}
-                            onChange={(val) => setCartItemField(item.productId, 'price', val, item.unitName)}
-                          />
-                        </td>
-                        <td className="py-3 text-right font-extrabold text-slate-800 dark:text-slate-100">
-                          {formatCurrency(item.quantity * item.price)}
-                        </td>
-                        <td className="py-3 text-right">
-                          <button onClick={() => removeCartItem(item.productId, item.unitName)} className="text-slate-300 hover:text-rose-500 p-1">
+                          <button
+                            type="button"
+                            onClick={() => removeCartItem(item.productId, item.unitName)}
+                            className="text-slate-400 hover:text-rose-500 p-1"
+                          >
                             <Trash2 size={16} />
                           </button>
-                        </td>
-                      </tr>
+                        </div>
+
+                        {/* Chọn nhanh ĐVT nhập (Lon / Lốc / Thùng) */}
+                        {item.units && item.units.length > 0 && (
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <span className="text-[10px] font-bold text-slate-400 mr-0.5">ĐVT nhập:</span>
+                            <button
+                              type="button"
+                              onClick={() => handleChangePurchaseUnit(item.productId, item.unitName, item.baseUnit)}
+                              className={`px-2 py-0.5 rounded-lg text-[11px] font-bold border transition-all ${
+                                item.unitName === item.baseUnit
+                                  ? 'bg-sky-500 text-white border-sky-500'
+                                  : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                              }`}
+                            >
+                              {item.baseUnit}
+                            </button>
+                            {item.units.map((u) => (
+                              <button
+                                key={u.id || u.unitName}
+                                type="button"
+                                onClick={() => handleChangePurchaseUnit(item.productId, item.unitName, u.unitName)}
+                                className={`px-2 py-0.5 rounded-lg text-[11px] font-bold border transition-all ${
+                                  item.unitName === u.unitName
+                                    ? 'bg-sky-500 text-white border-sky-500'
+                                    : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-700'
+                                }`}
+                              >
+                                {u.unitName} (x{u.conversionFactor})
+                              </button>
+                            ))}
+                          </div>
+                        )}
+
+                        <div className="grid grid-cols-2 gap-2.5 items-center pt-1">
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 block mb-1">Số lượng ({item.unitName})</span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => updateCartQty(item.productId, -1, item.unitName)}
+                                className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-sm"
+                              >
+                                -
+                              </button>
+                              <input
+                                type="number"
+                                min="1"
+                                className="w-14 text-center font-bold text-sm bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl py-1.5"
+                                value={item.quantity}
+                                onChange={(e) => setCartItemField(item.productId, 'quantity', e.target.value, item.unitName)}
+                              />
+                              <button
+                                type="button"
+                                onClick={() => updateCartQty(item.productId, 1, item.unitName)}
+                                className="w-8 h-8 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 font-bold text-sm"
+                              >
+                                +
+                              </button>
+                            </div>
+                          </div>
+
+                          <div>
+                            <span className="text-[10px] font-bold text-slate-400 block mb-1">Đơn giá nhập / {item.unitName}</span>
+                            <MoneyInput
+                              className="input py-1.5 px-2.5 text-right font-bold text-xs bg-white dark:bg-slate-800"
+                              value={item.price}
+                              onChange={(val) => setCartItemField(item.productId, 'price', val, item.unitName)}
+                            />
+                          </div>
+                        </div>
+
+                        {item.hasExpiryDate && (
+                          <div className="grid grid-cols-2 gap-2 bg-amber-50/70 dark:bg-amber-950/30 p-2 rounded-xl border border-amber-200/50 text-xs">
+                            <input
+                              type="text"
+                              placeholder="Số lô (VD: LOT-01)"
+                              className="input py-1 px-2 text-xs font-mono bg-white dark:bg-slate-800"
+                              value={item.batchNumber}
+                              onChange={(e) => setCartItemField(item.productId, 'batchNumber', e.target.value, item.unitName)}
+                            />
+                            <input
+                              type="date"
+                              className="input py-1 px-2 text-xs bg-white dark:bg-slate-800"
+                              value={item.expiryDate}
+                              onChange={(e) => setCartItemField(item.productId, 'expiryDate', e.target.value, item.unitName)}
+                            />
+                          </div>
+                        )}
+
+                        <div className="flex justify-between items-center pt-1.5 border-t border-slate-200/60 dark:border-slate-700/60 text-xs">
+                          <span className="text-slate-400">
+                            Quy đổi nhập kho: <b className="text-slate-600 dark:text-slate-300">+{item.quantity * (item.conversionFactor || 1)} {item.baseUnit}</b>
+                          </span>
+                          <span className="font-black text-sky-600 text-sm">
+                            {formatCurrency(item.quantity * item.price)}
+                          </span>
+                        </div>
+                      </div>
                     ))}
-                  </tbody>
-                </table>
+                  </div>
+
+                  {/* Desktop Table (>= 768px) */}
+                  <div className="hidden md:block overflow-x-auto">
+                    <table className="w-full text-left border-collapse text-sm">
+                      <thead>
+                        <tr className="border-b border-slate-100 dark:border-slate-800 text-slate-400 text-xs uppercase">
+                          <th className="py-2.5">Sản phẩm</th>
+                          <th className="py-2.5 text-center w-28">Số lượng nhập</th>
+                          <th className="py-2.5 text-right w-36">Giá nhập</th>
+                          <th className="py-2.5 text-right w-36">Thành tiền</th>
+                          <th className="py-2.5 text-right w-10"></th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                        {cart.map((item, cIdx) => (
+                          <tr key={`${item.productId}-${item.unitName || item.unit}-${cIdx}`}>
+                            <td className="py-3">
+                              <p className="font-bold text-slate-800 dark:text-slate-100">{item.name}</p>
+                              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                <span className="text-xs text-slate-400 font-mono">
+                                  {item.sku}
+                                  {item.barcode && <span className="ml-1 text-sky-500">· {item.barcode}</span>}
+                                </span>
+
+                                {item.units && item.units.length > 0 && (
+                                  <select
+                                    className="bg-slate-100 dark:bg-slate-800 text-[11px] font-bold text-sky-600 dark:text-sky-400 rounded-lg border border-slate-200 dark:border-slate-700 py-0.5 px-1.5 focus:outline-none"
+                                    value={item.unitName}
+                                    onChange={(e) => handleChangePurchaseUnit(item.productId, item.unitName, e.target.value)}
+                                  >
+                                    <option value={item.baseUnit}>{item.baseUnit} (Gốc)</option>
+                                    {item.units.map(u => (
+                                      <option key={u.id || u.unitName} value={u.unitName}>
+                                        {u.unitName} (x{u.conversionFactor} {item.baseUnit})
+                                      </option>
+                                    ))}
+                                  </select>
+                                )}
+                              </div>
+
+                              {item.hasExpiryDate && (
+                                <div className="mt-2 flex items-center gap-2 flex-wrap text-xs bg-amber-50/70 dark:bg-amber-950/30 p-1.5 rounded-lg border border-amber-200/50 dark:border-amber-800/40">
+                                  <span className="text-[10px] font-bold text-amber-700 dark:text-amber-400 shrink-0">
+                                    Lô & HSD:
+                                  </span>
+                                  <input
+                                    type="text"
+                                    placeholder="Số lô (VD: LOT-01)..."
+                                    className="input py-0.5 px-2 text-xs font-mono w-28 bg-white dark:bg-slate-800"
+                                    value={item.batchNumber}
+                                    onChange={(e) => setCartItemField(item.productId, 'batchNumber', e.target.value, item.unitName)}
+                                  />
+                                  <input
+                                    type="date"
+                                    className="input py-0.5 px-2 text-xs w-32 bg-white dark:bg-slate-800"
+                                    value={item.expiryDate}
+                                    onChange={(e) => setCartItemField(item.productId, 'expiryDate', e.target.value, item.unitName)}
+                                  />
+                                </div>
+                              )}
+                            </td>
+                            <td className="py-3 text-center">
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  type="button"
+                                  onClick={() => updateCartQty(item.productId, -1, item.unitName)}
+                                  className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold text-sm"
+                                >
+                                  -
+                                </button>
+                                <input
+                                  type="number"
+                                  min="1"
+                                  className="w-12 text-center font-bold text-sm bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg py-1"
+                                  value={item.quantity}
+                                  onChange={(e) => setCartItemField(item.productId, 'quantity', e.target.value, item.unitName)}
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => updateCartQty(item.productId, 1, item.unitName)}
+                                  className="w-7 h-7 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-700 dark:text-slate-200 flex items-center justify-center font-bold text-sm"
+                                >
+                                  +
+                                </button>
+                                <span className="text-xs text-slate-400 font-medium ml-1">{item.unitName || item.unit || 'Cái'}</span>
+                              </div>
+                            </td>
+                            <td className="py-3 text-right">
+                              <MoneyInput
+                                className="input py-1 px-2 text-right font-semibold text-xs"
+                                value={item.price}
+                                onChange={(val) => setCartItemField(item.productId, 'price', val, item.unitName)}
+                              />
+                            </td>
+                            <td className="py-3 text-right font-extrabold text-slate-800 dark:text-slate-100">
+                              {formatCurrency(item.quantity * item.price)}
+                            </td>
+                            <td className="py-3 text-right">
+                              <button onClick={() => removeCartItem(item.productId, item.unitName)} className="text-slate-300 hover:text-rose-500 p-1">
+                                <Trash2 size={16} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
               )}
             </div>
           </div>
@@ -835,72 +977,131 @@ const Purchases = () => {
             }
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[780px]">
-              <thead>
-                <tr className="bg-slate-50/75 text-slate-500 text-xs uppercase tracking-wider">
-                  <th className="th">Mã phiếu</th>
-                  <th className="th">Thời gian nhập</th>
-                  <th className="th">Nhà cung cấp</th>
-                  <th className="th">Thanh toán</th>
-                  <th className="th">Trạng thái</th>
-                  <th className="th text-right">Tổng tiền hàng</th>
-                  <th className="th text-right">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-sm">
-                {purchases.map((p) => {
-                  const isCancelled = p.status === 'CANCELLED';
-                  const unpaid = Math.max(0, Number(p.totalAmount || 0) - Number(p.paidAmount ?? p.totalAmount));
-                  return (
-                    <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="td font-bold text-sky-600 font-mono">
-                        {p.code}
-                      </td>
-                      <td className="td text-slate-500 text-xs">
-                        {formatDate(p.createdAt)}
-                      </td>
-                      <td className="td font-semibold text-slate-800">
-                        {p.supplier?.name || 'Nhà cung cấp lẻ'}
-                      </td>
-                      <td className="td text-xs text-slate-600">
-                        <div>{PAYMENT_LABELS[p.paymentMethod] || 'Tiền mặt'}</div>
+          <>
+            {/* Mobile Card List (< 768px) */}
+            <div className="md:hidden space-y-2.5">
+              {purchases.map((p) => {
+                const isCancelled = p.status === 'CANCELLED';
+                const unpaid = Math.max(0, Number(p.totalAmount || 0) - Number(p.paidAmount ?? p.totalAmount));
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => handleViewDetail(p.id)}
+                    className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/60 dark:bg-slate-800/40 active:scale-[0.99] transition-all cursor-pointer"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-black text-sky-600 text-sm">{p.code}</span>
+                          <span className={`chip text-[10px] py-0.5 px-2 ${isCancelled ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'}`}>
+                            {isCancelled ? 'Đã hủy' : 'Hoàn thành'}
+                          </span>
+                        </div>
+                        <p className="text-xs font-bold text-slate-800 dark:text-slate-100 mt-1">
+                          {p.supplier?.name || 'Nhà cung cấp lẻ'}
+                        </p>
+                        <p className="text-[11px] text-slate-400 mt-0.5">
+                          {formatDate(p.createdAt)} · {PAYMENT_LABELS[p.paymentMethod] || 'Tiền mặt'}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="font-black text-base text-slate-800 dark:text-slate-100">{formatCurrency(p.totalAmount)}</p>
                         {!isCancelled && unpaid > 0 && (
-                          <span className="text-[11px] font-bold text-rose-600">Nợ: {formatCurrency(unpaid)}</span>
+                          <p className="text-[11px] font-bold text-rose-600 mt-0.5">Nợ NCC: {formatCurrency(unpaid)}</p>
                         )}
-                      </td>
-                      <td className="td">
-                        <span className={`chip ${isCancelled ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'}`}>
-                          {isCancelled ? 'Đã hủy' : 'Hoàn thành'}
-                        </span>
-                      </td>
-                      <td className="td text-right font-extrabold text-slate-800">
-                        {formatCurrency(p.totalAmount)}
-                      </td>
-                      <td className="td text-right space-x-1">
-                        <button
-                          onClick={() => handleViewDetail(p.id)}
-                          className="icon-btn text-sky-500 hover:bg-sky-50"
-                          title="Xem chi tiết phiếu nhập"
-                        >
-                          <Eye size={17} />
-                        </button>
-                        {!isCancelled && (
+                        <div className="flex items-center justify-end gap-1 mt-2" onClick={(e) => e.stopPropagation()}>
                           <button
-                            onClick={() => handleCancelPurchase(p)}
-                            className="icon-btn text-rose-500 hover:bg-rose-50"
-                            title="Hủy phiếu nhập (Thu hồi tồn kho)"
+                            onClick={() => handleViewDetail(p.id)}
+                            className="icon-btn text-sky-500 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                            title="Xem chi tiết"
                           >
-                            <Ban size={17} />
+                            <Eye size={15} />
                           </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                          {!isCancelled && (
+                            <button
+                              onClick={() => handleCancelPurchase(p)}
+                              className="icon-btn text-rose-500 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                              title="Hủy phiếu"
+                            >
+                              <Ban size={15} />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop Table (>= 768px) */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[780px]">
+                <thead>
+                  <tr className="bg-slate-50/75 text-slate-500 text-xs uppercase tracking-wider">
+                    <th className="th">Mã phiếu</th>
+                    <th className="th">Thời gian nhập</th>
+                    <th className="th">Nhà cung cấp</th>
+                    <th className="th">Thanh toán</th>
+                    <th className="th">Trạng thái</th>
+                    <th className="th text-right">Tổng tiền hàng</th>
+                    <th className="th text-right">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
+                  {purchases.map((p) => {
+                    const isCancelled = p.status === 'CANCELLED';
+                    const unpaid = Math.max(0, Number(p.totalAmount || 0) - Number(p.paidAmount ?? p.totalAmount));
+                    return (
+                      <tr key={p.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="td font-bold text-sky-600 font-mono">
+                          {p.code}
+                        </td>
+                        <td className="td text-slate-500 text-xs">
+                          {formatDate(p.createdAt)}
+                        </td>
+                        <td className="td font-semibold text-slate-800">
+                          {p.supplier?.name || 'Nhà cung cấp lẻ'}
+                        </td>
+                        <td className="td text-xs text-slate-600">
+                          <div>{PAYMENT_LABELS[p.paymentMethod] || 'Tiền mặt'}</div>
+                          {!isCancelled && unpaid > 0 && (
+                            <span className="text-[11px] font-bold text-rose-600">Nợ: {formatCurrency(unpaid)}</span>
+                          )}
+                        </td>
+                        <td className="td">
+                          <span className={`chip ${isCancelled ? 'bg-rose-50 text-rose-500' : 'bg-emerald-50 text-emerald-600'}`}>
+                            {isCancelled ? 'Đã hủy' : 'Hoàn thành'}
+                          </span>
+                        </td>
+                        <td className="td text-right font-extrabold text-slate-800">
+                          {formatCurrency(p.totalAmount)}
+                        </td>
+                        <td className="td text-right space-x-1">
+                          <button
+                            onClick={() => handleViewDetail(p.id)}
+                            className="icon-btn text-sky-500 hover:bg-sky-50"
+                            title="Xem chi tiết phiếu nhập"
+                          >
+                            <Eye size={17} />
+                          </button>
+                          {!isCancelled && (
+                            <button
+                              onClick={() => handleCancelPurchase(p)}
+                              className="icon-btn text-rose-500 hover:bg-rose-50"
+                              title="Hủy phiếu nhập (Thu hồi tồn kho)"
+                            >
+                              <Ban size={17} />
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
 
         <Pagination pagination={pagination} onChange={setPage} />

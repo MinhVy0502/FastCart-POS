@@ -6,12 +6,14 @@ import {
   Filter, Download, Upload, Barcode, CheckCircle2,
   MapPin, Layers, Building2, History, ArrowDownLeft,
   ArrowUpRight, RefreshCw, TrendingUp, Sparkles, Copy,
-  Check, Calendar, Clock, AlertTriangle, Boxes, PlusCircle
+  Check, Calendar, Clock, AlertTriangle, Boxes, PlusCircle,
+  Camera, ChevronDown, ChevronUp, Warehouse, FolderTree
 } from 'lucide-react';
 import api from '../services/api';
 import { useToast } from '../contexts/ToastContext';
 import { useStore } from '../contexts/StoreContext';
 import { PageHeader, Modal, MoneyInput, Pagination, EmptyState, SkeletonRows } from '../components/ui';
+import CameraScanner from '../components/CameraScanner';
 import { formatCurrency, formatDate, formatStockBreakdown, getErrorMessage } from '../utils/format';
 import { printBarcodeLabels } from '../utils/print';
 
@@ -180,6 +182,7 @@ const Products = () => {
     importPrice: 0,
     salePrice: 0,
     wholesalePrice: 0,
+    currentStock: 0,
     minStock: 10,
     hasExpiryDate: false,
     expiryWarningDays: 30,
@@ -188,6 +191,8 @@ const Products = () => {
   const [saving, setSaving] = useState(false);
   const [copiedSku, setCopiedSku] = useState(false);
   const [showAllUnits, setShowAllUnits] = useState(false);
+  const [showAdvancedForm, setShowAdvancedForm] = useState(false);
+  const [scannerTarget, setScannerTarget] = useState(null); // null | 'main' | number (unit index)
 
   // Batch Management Modal state
   const [batchModalOpen, setBatchModalOpen] = useState(false);
@@ -297,6 +302,7 @@ const Products = () => {
         importPrice: Number(product.importPrice) || 0,
         salePrice: Number(product.salePrice) || 0,
         wholesalePrice: Number(product.wholesalePrice) || 0,
+        currentStock: Number(product.currentStock) || 0,
         minStock: product.minStock || 10,
         hasExpiryDate: Boolean(product.hasExpiryDate),
         expiryWarningDays: product.expiryWarningDays || 30,
@@ -309,6 +315,7 @@ const Products = () => {
           wholesalePrice: Number(u.wholesalePrice) || 0
         }))
       });
+      setShowAdvancedForm(Boolean(product.categoryId || product.shelfId || product.supplierId || product.hasExpiryDate));
     } else {
       setEditingId(null);
       setFormData({
@@ -322,11 +329,13 @@ const Products = () => {
         importPrice: 0,
         salePrice: 0,
         wholesalePrice: 0,
+        currentStock: 0,
         minStock: 10,
         hasExpiryDate: false,
         expiryWarningDays: 30,
         units: []
       });
+      setShowAdvancedForm(false);
     }
     setShowModal(true);
   };
@@ -530,14 +539,20 @@ const Products = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (!formData.sku.trim() || !formData.name.trim()) {
-      return toast.warning('Mã SKU và Tên sản phẩm là bắt buộc');
+    if (!formData.name.trim()) {
+      return toast.warning('Tên sản phẩm là bắt buộc');
     }
     try {
       setSaving(true);
+      const autoSku = formData.sku.trim()
+        ? formData.sku.trim().toUpperCase()
+        : (formData.barcode.trim()
+            ? `SP-${formData.barcode.trim().slice(-6).toUpperCase()}`
+            : `SP${Date.now().toString().slice(-6)}`);
+
       const payload = { 
         ...formData, 
-        sku: formData.sku.trim().toUpperCase(),
+        sku: autoSku,
         barcode: formData.barcode.trim() || null,
         name: formData.name.trim(),
         unit: formData.unit.trim() || 'Cái',
@@ -547,6 +562,7 @@ const Products = () => {
         importPrice: Number(formData.importPrice) || 0,
         salePrice: Number(formData.salePrice) || 0,
         wholesalePrice: Number(formData.wholesalePrice) || 0,
+        currentStock: Math.max(parseInt(formData.currentStock) || 0, 0),
         minStock: Number(formData.minStock) || 0,
         hasExpiryDate: Boolean(formData.hasExpiryDate),
         expiryWarningDays: Math.max(parseInt(formData.expiryWarningDays) || 30, 1),
@@ -745,8 +761,8 @@ const Products = () => {
       <PageHeader
         icon={Package}
         color="sky"
-        title="Danh mục sản phẩm"
-        subtitle="Quản lý mặt hàng, mã vạch (Barcode), đơn vị tính, tỷ suất lợi nhuận và lịch sử biến động kho"
+        title="Hàng hóa & Giá bán"
+        subtitle="Quản lý mặt hàng, mã vạch (Barcode), quy cách Thùng/Lốc, giá lẻ & giá sỉ đại lý"
         actions={
           <div className="flex items-center gap-2 flex-wrap">
             <input
@@ -761,14 +777,14 @@ const Products = () => {
               className="btn-secondary text-xs sm:text-sm"
               title="Nhập danh sách từ Excel"
             >
-              <Upload size={16} /> Nhập Excel
+              <Upload size={16} /> <span className="hidden sm:inline">Nhập</span> Excel
             </button>
             <button
               onClick={handleExportExcel}
               className="btn-secondary text-xs sm:text-sm"
               title="Xuất danh sách ra file Excel"
             >
-              <Download size={16} /> Xuất Excel
+              <Download size={16} /> <span className="hidden sm:inline">Xuất</span> Excel
             </button>
             <button onClick={() => openModal()} className="btn-primary">
               <Plus size={18} /> Thêm sản phẩm
@@ -777,7 +793,39 @@ const Products = () => {
         }
       />
 
-      <div className="card p-5 sm:p-6 space-y-4">
+      {/* Quick Navigation Pills for Mobile & Desktop */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        <button
+          type="button"
+          onClick={() => navigate('/products')}
+          className="px-3.5 py-2 rounded-2xl text-xs font-bold bg-sky-500 text-white shadow-sm shadow-sky-500/20 flex items-center gap-1.5 shrink-0"
+        >
+          <Package size={15} /> Sản phẩm ({pagination?.total || products.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/inventory')}
+          className="px-3.5 py-2 rounded-2xl text-xs font-bold bg-white dark:bg-[#151f33] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-sky-400 flex items-center gap-1.5 shrink-0 transition-colors"
+        >
+          <Warehouse size={15} className="text-amber-500" /> Tồn kho & Kiểm kê
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/categories')}
+          className="px-3.5 py-2 rounded-2xl text-xs font-bold bg-white dark:bg-[#151f33] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-sky-400 flex items-center gap-1.5 shrink-0 transition-colors"
+        >
+          <FolderTree size={15} className="text-indigo-500" /> Danh mục ({categories.length})
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/shelves')}
+          className="px-3.5 py-2 rounded-2xl text-xs font-bold bg-white dark:bg-[#151f33] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-sky-400 flex items-center gap-1.5 shrink-0 transition-colors"
+        >
+          <Layers size={15} className="text-emerald-500" /> Kệ hàng ({shelves.length})
+        </button>
+      </div>
+
+      <div className="card p-4 sm:p-6 space-y-4">
         {/* Toolbar: Search & Filters */}
         <div className="flex flex-col lg:flex-row gap-3 justify-between items-stretch lg:items-center">
           <div className="relative flex-1 max-w-md">
@@ -791,7 +839,7 @@ const Products = () => {
             />
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
             <select
               className="input w-full sm:w-36 text-xs"
               value={filterCategory}
@@ -828,7 +876,7 @@ const Products = () => {
             <button
               type="button"
               onClick={() => { setFilterExpiry(!filterExpiry); setPage(1); }}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+              className={`px-3 py-2 sm:py-1.5 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
                 filterExpiry
                   ? 'bg-amber-500 text-white shadow-sm shadow-amber-500/25'
                   : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
@@ -837,10 +885,6 @@ const Products = () => {
             >
               <Calendar size={13} /> Có HSD
             </button>
-
-            <span className="text-xs text-slate-400 font-medium whitespace-nowrap hidden xl:inline ml-1">
-              {pagination?.total ? `Tổng ${pagination.total} SP` : ''}
-            </span>
           </div>
         </div>
 
@@ -859,188 +903,305 @@ const Products = () => {
             }
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[960px]">
-              <thead>
-                <tr className="bg-slate-50/75 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider">
-                  <th className="th">Mã SKU & Barcode</th>
-                  <th className="th">Tên sản phẩm</th>
-                  <th className="th">ĐVT & Quy đổi</th>
-                  <th className="th">Phân loại & NCC</th>
-                  <th className="th text-right">Giá nhập</th>
-                  <th className="th text-right">Giá bán lẻ (Biên LN)</th>
-                  <th className="th text-right">Giá bán sỉ</th>
-                  <th className="th text-center">Tồn kho</th>
-                  <th className="th text-right">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 text-sm">
-                {products.map((p) => {
-                  const isLowStock = p.currentStock <= p.minStock;
-                  const itemImport = Number(p.importPrice) || 0;
-                  const itemSale = Number(p.salePrice) || 0;
-                  const margin = itemImport > 0 ? (((itemSale - itemImport) / itemImport) * 100).toFixed(0) : null;
-
-                  return (
-                    <tr key={p.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition-colors">
-                      <td className="td">
-                        <div className="flex flex-col gap-0.5">
-                          <span className="font-mono font-bold text-slate-700 dark:text-slate-200 text-xs">
-                            {p.sku}
-                          </span>
-                          {p.barcode ? (
-                            <span className="inline-flex items-center gap-1 font-mono text-[11px] text-slate-400 dark:text-slate-500" title="Mã vạch Barcode">
-                              <Barcode size={12} className="text-sky-500" />
-                              {p.barcode}
+          <>
+            {/* Mobile Card List (< 768px) */}
+            <div className="md:hidden space-y-2.5">
+              {products.map((p) => {
+                const isLowStock = p.currentStock <= p.minStock;
+                const breakdown = formatStockBreakdown(p.currentStock, p.unit, p.units);
+                return (
+                  <div
+                    key={p.id}
+                    onClick={() => openModal(p)}
+                    className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/60 dark:bg-slate-800/40 space-y-2.5 active:scale-[0.99] transition-all cursor-pointer"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5 flex-wrap mb-1">
+                          <span className="font-mono text-[11px] font-bold text-slate-400">{p.barcode || p.sku}</span>
+                          {p.category && (
+                            <span className="chip text-[10px] py-0.2 px-1.5 bg-sky-50 dark:bg-sky-950/50 text-sky-600 dark:text-sky-400 font-semibold">
+                              {p.category.name}
                             </span>
-                          ) : (
-                            <span className="text-[10px] text-slate-300 dark:text-slate-600 italic">Chưa có mã vạch</span>
+                          )}
+                          {p.shelf && (
+                            <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-amber-600 bg-amber-50 dark:bg-amber-950/40 px-1.5 py-0.2 rounded-full">
+                              <MapPin size={9} /> {p.shelf.code || p.shelf.name}
+                            </span>
                           )}
                         </div>
-                      </td>
-                      <td className="td font-bold text-slate-800 dark:text-slate-100">
-                        <div className="flex items-center gap-2.5">
-                          <div className="w-8 h-8 rounded-xl bg-sky-50 dark:bg-sky-950/40 text-sky-500 flex items-center justify-center shrink-0">
-                            <Package size={17} />
-                          </div>
-                          <div className="min-w-0">
-                            <span className="line-clamp-2 max-w-xs">{p.name}</span>
-                            {p.hasExpiryDate && (
-                              <div className="flex items-center gap-1 mt-0.5">
-                                <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 px-1.5 py-0.2 rounded border border-amber-200/50 dark:border-amber-800/50">
-                                  <Clock size={10} /> Theo dõi HSD ({p.batches?.length || 0} lô)
-                                </span>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="td">
-                        <span className="chip bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs px-2 py-0.5">
-                          {p.unit || 'Cái'}
+                        <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm leading-snug">{p.name}</h4>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <span className={`chip font-bold text-xs ${
+                          isLowStock
+                            ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400'
+                            : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400'
+                        }`}>
+                          Tồn: {p.currentStock} {p.unit || 'Cái'}
                         </span>
-                        {p.units && p.units.length > 0 && (
-                          <div className="mt-1 flex flex-col gap-0.5">
-                            {p.units.map(u => (
-                              <span key={u.id || u.unitName} className="text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/80 px-1.5 py-0.2 rounded border border-slate-200/50 dark:border-slate-700/50 truncate max-w-[140px]" title={`1 ${u.unitName} = ${u.conversionFactor} ${p.unit || 'Cái'}`}>
-                                1 {u.unitName} = {u.conversionFactor} {p.unit || 'Cái'}
-                              </span>
-                            ))}
-                          </div>
+                        {breakdown && (
+                          <p className="text-[10px] font-semibold text-sky-600 dark:text-sky-400 mt-0.5">
+                            ≈ {breakdown}
+                          </p>
                         )}
-                      </td>
-                      <td className="td text-slate-500 text-xs">
-                        <div className="flex flex-col gap-1 items-start">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            {p.category ? (
-                              <span className="chip bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 font-semibold text-[11px]">
-                                {p.category.name}
-                              </span>
-                            ) : null}
-                            {p.shelf ? (
-                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full">
-                                <MapPin size={10} className="shrink-0" />
-                                {p.shelf.code ? `[${p.shelf.code}] ` : ''}{p.shelf.name}
-                              </span>
-                            ) : null}
-                          </div>
-                          {p.supplier ? (
-                            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 px-2 py-0.5 rounded-full">
-                              <Building2 size={10} className="shrink-0" />
-                              {p.supplier.name}
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td className="td text-right text-slate-500 dark:text-slate-400 text-xs">
-                        {formatCurrency(p.importPrice)}
-                      </td>
-                      <td className="td text-right">
-                        <div className="flex flex-col items-end">
-                          <span className="font-bold text-sky-600 dark:text-sky-400">
-                            {formatCurrency(p.salePrice)}
+                      </div>
+                    </div>
+
+                    {/* Giá lẻ / Giá sỉ / Quy cách */}
+                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-slate-200/70 dark:border-slate-700/60 text-xs">
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Giá bán lẻ</span>
+                        <span className="font-extrabold text-sky-600 dark:text-sky-400">{formatCurrency(p.salePrice)}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Giá bán sỉ</span>
+                        <span className="font-extrabold text-indigo-600 dark:text-indigo-400">
+                          {Number(p.wholesalePrice) > 0 ? formatCurrency(p.wholesalePrice) : '—'}
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] text-slate-400 block">Giá vốn</span>
+                        <span className="font-semibold text-slate-600 dark:text-slate-300">{formatCurrency(p.importPrice)}</span>
+                      </div>
+                    </div>
+
+                    {/* Action bar */}
+                    <div className="flex items-center justify-between pt-1.5 border-t border-slate-100 dark:border-slate-800" onClick={(e) => e.stopPropagation()}>
+                      <div className="flex items-center gap-1 flex-wrap">
+                        {p.units?.map((u) => (
+                          <span key={u.id || u.unitName} className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-300">
+                            1 {u.unitName} = {u.conversionFactor} {p.unit}
                           </span>
-                          {margin !== null && (
-                            <span className={`text-[10px] font-semibold ${Number(margin) >= 20 ? 'text-emerald-500' : 'text-slate-400'}`}>
-                              +{margin}%
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="td text-right">
-                        {Number(p.wholesalePrice) > 0 ? (
-                          <span className="font-extrabold text-indigo-600 dark:text-indigo-400">
-                            {formatCurrency(p.wholesalePrice)}
-                          </span>
-                        ) : (
-                          <span className="text-slate-400 text-xs italic">Chưa đặt</span>
-                        )}
-                      </td>
-                      <td className="td text-center">
-                        <div className="flex flex-col items-center gap-0.5">
-                          <span className={`chip font-bold text-xs ${isLowStock ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400' : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400'}`}>
-                            {p.currentStock} {p.unit || 'Cái'}
-                          </span>
-                          {formatStockBreakdown(p.currentStock, p.unit, p.units) && (
-                            <span className="text-[10px] font-semibold text-sky-600 dark:text-sky-400 bg-sky-50/80 dark:bg-sky-950/40 px-1.5 py-0.2 rounded">
-                              ≈ {formatStockBreakdown(p.currentStock, p.unit, p.units)}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="td text-right space-x-1 whitespace-nowrap">
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-1 shrink-0">
                         <button
                           onClick={() => openBatchModal(p)}
-                          className="icon-btn text-teal-600 hover:bg-teal-50 dark:text-teal-400 dark:hover:bg-slate-800"
-                          title="Quản lý lô hàng & hạn sử dụng (FEFO)"
+                          className="icon-btn text-teal-600 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                          title="Lô & HSD"
                         >
-                          <Boxes size={17} />
+                          <Boxes size={15} />
                         </button>
                         <button
                           onClick={() => openHistoryModal(p)}
-                          className="icon-btn text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-slate-800"
-                          title="Lịch sử biến động kho (Audit Trail)"
+                          className="icon-btn text-indigo-600 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                          title="Thẻ kho"
                         >
-                          <History size={17} />
+                          <History size={15} />
                         </button>
                         <button
                           onClick={() => { setSelectedProductForBarcode(p); setBarcodeUnitIdx(-1); setBarcodeModalOpen(true); }}
-                          className="icon-btn text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
-                          title="In tem mã vạch"
+                          className="icon-btn text-slate-600 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                          title="In tem"
                         >
-                          <Barcode size={17} />
+                          <Barcode size={15} />
                         </button>
                         <button
                           onClick={() => openModal(p)}
-                          className="icon-btn text-amber-500 hover:bg-amber-50 dark:hover:bg-slate-800"
-                          title="Chỉnh sửa sản phẩm"
+                          className="icon-btn text-amber-500 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                          title="Sửa"
                         >
-                          <Edit2 size={17} />
+                          <Edit2 size={15} />
                         </button>
                         <button
                           onClick={() => handleDelete(p)}
-                          className="icon-btn text-rose-500 hover:bg-rose-50 dark:hover:bg-slate-800"
-                          title="Xóa sản phẩm"
+                          className="icon-btn text-rose-500 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                          title="Xóa"
                         >
-                          <Trash2 size={17} />
+                          <Trash2 size={15} />
                         </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop Table (>= 768px) */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[960px]">
+                <thead>
+                  <tr className="bg-slate-50/75 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 text-xs uppercase tracking-wider">
+                    <th className="th">Mã SKU & Barcode</th>
+                    <th className="th">Tên sản phẩm</th>
+                    <th className="th">ĐVT & Quy đổi</th>
+                    <th className="th">Phân loại & NCC</th>
+                    <th className="th text-right">Giá nhập</th>
+                    <th className="th text-right">Giá bán lẻ (Biên LN)</th>
+                    <th className="th text-right">Giá bán sỉ</th>
+                    <th className="th text-center">Tồn kho</th>
+                    <th className="th text-right">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/80 text-sm">
+                  {products.map((p) => {
+                    const isLowStock = p.currentStock <= p.minStock;
+                    const itemImport = Number(p.importPrice) || 0;
+                    const itemSale = Number(p.salePrice) || 0;
+                    const margin = itemImport > 0 ? (((itemSale - itemImport) / itemImport) * 100).toFixed(0) : null;
+
+                    return (
+                      <tr key={p.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/30 transition-colors">
+                        <td className="td">
+                          <div className="flex flex-col gap-0.5">
+                            <span className="font-mono font-bold text-slate-700 dark:text-slate-200 text-xs">
+                              {p.sku}
+                            </span>
+                            {p.barcode ? (
+                              <span className="inline-flex items-center gap-1 font-mono text-[11px] text-slate-400 dark:text-slate-500" title="Mã vạch Barcode">
+                                <Barcode size={12} className="text-sky-500" />
+                                {p.barcode}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] text-slate-300 dark:text-slate-600 italic">Chưa có mã vạch</span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="td font-bold text-slate-800 dark:text-slate-100">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-8 h-8 rounded-xl bg-sky-50 dark:bg-sky-950/40 text-sky-500 flex items-center justify-center shrink-0">
+                              <Package size={17} />
+                            </div>
+                            <div className="min-w-0">
+                              <span className="line-clamp-2 max-w-xs">{p.name}</span>
+                              {p.hasExpiryDate && (
+                                <div className="flex items-center gap-1 mt-0.5">
+                                  <span className="inline-flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/50 px-1.5 py-0.2 rounded border border-amber-200/50 dark:border-amber-800/50">
+                                    <Clock size={10} /> Theo dõi HSD ({p.batches?.length || 0} lô)
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="td">
+                          <span className="chip bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold text-xs px-2 py-0.5">
+                            {p.unit || 'Cái'}
+                          </span>
+                          {p.units && p.units.length > 0 && (
+                            <div className="mt-1 flex flex-col gap-0.5">
+                              {p.units.map(u => (
+                                <span key={u.id || u.unitName} className="text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-50 dark:bg-slate-800/80 px-1.5 py-0.2 rounded border border-slate-200/50 dark:border-slate-700/50 truncate max-w-[140px]" title={`1 ${u.unitName} = ${u.conversionFactor} ${p.unit || 'Cái'}`}>
+                                  1 {u.unitName} = {u.conversionFactor} {p.unit || 'Cái'}
+                                </span>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+                        <td className="td text-slate-500 text-xs">
+                          <div className="flex flex-col gap-1 items-start">
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              {p.category ? (
+                                <span className="chip bg-sky-50 dark:bg-sky-950/40 text-sky-600 dark:text-sky-400 font-semibold text-[11px]">
+                                  {p.category.name}
+                                </span>
+                              ) : null}
+                              {p.shelf ? (
+                                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-full">
+                                  <MapPin size={10} className="shrink-0" />
+                                  {p.shelf.code ? `[${p.shelf.code}] ` : ''}{p.shelf.name}
+                                </span>
+                              ) : null}
+                            </div>
+                            {p.supplier ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-medium text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/40 px-2 py-0.5 rounded-full">
+                                <Building2 size={10} className="shrink-0" />
+                                {p.supplier.name}
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+                        <td className="td text-right text-slate-500 dark:text-slate-400 text-xs">
+                          {formatCurrency(p.importPrice)}
+                        </td>
+                        <td className="td text-right">
+                          <div className="flex flex-col items-end">
+                            <span className="font-bold text-sky-600 dark:text-sky-400">
+                              {formatCurrency(p.salePrice)}
+                            </span>
+                            {margin !== null && (
+                              <span className={`text-[10px] font-semibold ${Number(margin) >= 20 ? 'text-emerald-500' : 'text-slate-400'}`}>
+                                +{margin}%
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="td text-right">
+                          {Number(p.wholesalePrice) > 0 ? (
+                            <span className="font-extrabold text-indigo-600 dark:text-indigo-400">
+                              {formatCurrency(p.wholesalePrice)}
+                            </span>
+                          ) : (
+                            <span className="text-slate-400 text-xs italic">Chưa đặt</span>
+                          )}
+                        </td>
+                        <td className="td text-center">
+                          <div className="flex flex-col items-center gap-0.5">
+                            <span className={`chip font-bold text-xs ${isLowStock ? 'bg-rose-50 text-rose-600 dark:bg-rose-950/40 dark:text-rose-400' : 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/40 dark:text-emerald-400'}`}>
+                              {p.currentStock} {p.unit || 'Cái'}
+                            </span>
+                            {formatStockBreakdown(p.currentStock, p.unit, p.units) && (
+                              <span className="text-[10px] font-semibold text-sky-600 dark:text-sky-400 bg-sky-50/80 dark:bg-sky-950/40 px-1.5 py-0.2 rounded">
+                                ≈ {formatStockBreakdown(p.currentStock, p.unit, p.units)}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="td text-right space-x-1 whitespace-nowrap">
+                          <button
+                            onClick={() => openBatchModal(p)}
+                            className="icon-btn text-teal-600 hover:bg-teal-50 dark:text-teal-400 dark:hover:bg-slate-800"
+                            title="Quản lý lô hàng & hạn sử dụng (FEFO)"
+                          >
+                            <Boxes size={17} />
+                          </button>
+                          <button
+                            onClick={() => openHistoryModal(p)}
+                            className="icon-btn text-indigo-600 hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-slate-800"
+                            title="Lịch sử biến động kho (Audit Trail)"
+                          >
+                            <History size={17} />
+                          </button>
+                          <button
+                            onClick={() => { setSelectedProductForBarcode(p); setBarcodeUnitIdx(-1); setBarcodeModalOpen(true); }}
+                            className="icon-btn text-slate-600 hover:bg-slate-100 dark:text-slate-400 dark:hover:bg-slate-800"
+                            title="In tem mã vạch"
+                          >
+                            <Barcode size={17} />
+                          </button>
+                          <button
+                            onClick={() => openModal(p)}
+                            className="icon-btn text-amber-500 hover:bg-amber-50 dark:hover:bg-slate-800"
+                            title="Chỉnh sửa sản phẩm"
+                          >
+                            <Edit2 size={17} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(p)}
+                            className="icon-btn text-rose-500 hover:bg-rose-50 dark:hover:bg-slate-800"
+                            title="Xóa sản phẩm"
+                          >
+                            <Trash2 size={17} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
 
         <Pagination pagination={pagination} onChange={setPage} />
       </div>
 
-      {/* Modal Thêm / Sửa sản phẩm */}
+      {/* Modal Thêm / Sửa sản phẩm (Rút gọn, tối ưu cho chủ cửa hàng trên Điện thoại & Máy tính) */}
       <Modal
         open={showModal}
         onClose={closeModal}
-        title={editingId ? 'Chỉnh sửa sản phẩm' : 'Thêm sản phẩm mới'}
+        title={editingId ? 'Chỉnh sửa sản phẩm' : 'Thêm sản phẩm nhanh'}
         icon={<Package size={20} className="text-sky-500" />}
         footer={
           <>
@@ -1051,81 +1212,96 @@ const Products = () => {
           </>
         }
       >
-        <form id="product-form" onSubmit={handleSubmit} className="space-y-4 max-h-[80vh] overflow-y-auto px-1 py-1">
-          {/* Row 1: SKU & Barcode */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="label">Mã SKU (Mã nội bộ) *</label>
-              <input
-                type="text"
-                required
-                autoFocus
-                className="input font-mono uppercase font-bold"
-                placeholder="VD: SP001 hoặc COCA-330"
-                value={formData.sku}
-                onChange={(e) => setFormData({ ...formData, sku: e.target.value.toUpperCase() })}
-              />
-              <p className="text-[11px] text-slate-400 mt-1">Mã quản lý kho duy nhất trong hệ thống</p>
-            </div>
-
-            <div>
-              <div className="flex items-center justify-between mb-1.5">
-                <label className="label mb-0">Mã vạch (Barcode / EAN-13)</label>
-                {formData.sku && (
-                  <button
-                    type="button"
-                    onClick={handleCopySkuToBarcode}
-                    className="text-[11px] text-sky-600 dark:text-sky-400 font-semibold hover:underline flex items-center gap-1"
-                  >
-                    {copiedSku ? <Check size={11} className="text-emerald-500" /> : <Copy size={11} />}
-                    {copiedSku ? 'Đã sao chép!' : 'Lấy từ SKU'}
-                  </button>
-                )}
-              </div>
-              <div className="relative">
-                <Barcode className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
-                <input
-                  type="text"
-                  className="input pl-9 font-mono"
-                  placeholder="Quét hoặc nhập mã vạch EAN trên bao bì"
-                  value={formData.barcode}
-                  onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
-                />
-              </div>
-              <p className="text-[11px] text-slate-400 mt-1">Dùng để quét nhanh bằng súng barcode tại quầy POS</p>
-            </div>
-          </div>
-
-          {/* Row 2: Tên sản phẩm & Đơn vị tính */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div className="sm:col-span-2">
+        <form id="product-form" onSubmit={handleSubmit} className="space-y-4 max-h-[78vh] overflow-y-auto px-1 py-1">
+          {/* BƯỚC 1: Tên sản phẩm & Mã vạch (Có nút Quét Camera trực tiếp) */}
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5">
+            <div className="sm:col-span-7">
               <label className="label">Tên sản phẩm *</label>
               <input
                 type="text"
                 required
-                className="input"
-                placeholder="Nhập tên sản phẩm đầy đủ"
+                autoFocus
+                className="input font-semibold"
+                placeholder="VD: Nước ngọt Coca Cola 330ml, Gạo ST25..."
                 value={formData.name}
                 onChange={(e) => setFormData({ ...formData, name: e.target.value })}
               />
             </div>
 
+            <div className="sm:col-span-5">
+              <label className="label">Mã vạch (Barcode trên bao bì)</label>
+              <div className="flex items-center gap-1.5">
+                <div className="relative flex-1">
+                  <Barcode className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" size={16} />
+                  <input
+                    type="text"
+                    className="input pl-9 font-mono text-xs sm:text-sm"
+                    placeholder="Nhập hoặc bấm Camera quét"
+                    value={formData.barcode}
+                    onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
+                  />
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setScannerTarget('main')}
+                  className="px-3 py-2.5 rounded-xl bg-sky-50 dark:bg-sky-950/60 text-sky-600 dark:text-sky-400 border border-sky-200 dark:border-sky-800 hover:bg-sky-500 hover:text-white transition-colors shrink-0 flex items-center gap-1 text-xs font-bold"
+                  title="Dùng Camera điện thoại quét mã vạch"
+                >
+                  <Camera size={16} />
+                  <span>Quét</span>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* BƯỚC 2: Giá bán lẻ, Giá bán sỉ & Giá vốn */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5 p-3.5 rounded-2xl bg-sky-50/50 dark:bg-slate-800/40 border border-sky-100 dark:border-slate-800">
             <div>
+              <label className="label text-sky-700 dark:text-sky-300">Giá bán lẻ *</label>
+              <MoneyInput
+                value={formData.salePrice}
+                onChange={(val) => setFormData({ ...formData, salePrice: val })}
+              />
+            </div>
+
+            <div>
+              <label className="label flex items-center justify-between">
+                <span className="text-indigo-700 dark:text-indigo-300">Giá bán sỉ</span>
+                <span className="text-[10px] text-indigo-600 font-bold bg-indigo-100/80 dark:bg-indigo-950/60 px-1.5 py-0.2 rounded">Khách sỉ / Đại lý</span>
+              </label>
+              <MoneyInput
+                value={formData.wholesalePrice}
+                onChange={(val) => setFormData({ ...formData, wholesalePrice: val })}
+              />
+            </div>
+
+            <div>
+              <label className="label">Giá vốn (Giá nhập)</label>
+              <MoneyInput
+                value={formData.importPrice}
+                onChange={(val) => setFormData({ ...formData, importPrice: val })}
+              />
+            </div>
+          </div>
+
+          {/* BƯỚC 3: Đơn vị tính gốc & Tồn kho ban đầu */}
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-3.5">
+            <div className={editingId ? 'sm:col-span-12' : 'sm:col-span-8'}>
               <div className="flex items-center justify-between mb-1.5">
-                <label className="label mb-0">Đơn vị tính gốc (ĐVT) *</label>
+                <label className="label mb-0">Đơn vị tính nhỏ nhất (ĐVT gốc) *</label>
                 <button
                   type="button"
                   onClick={() => setShowAllUnits(!showAllUnits)}
                   className="text-[10px] font-bold text-sky-600 dark:text-sky-400 hover:underline"
                 >
-                  {showAllUnits ? 'Thu gọn' : 'Tất cả ngành hàng'}
+                  {showAllUnits ? 'Thu gọn' : 'Xem thêm ĐVT'}
                 </button>
               </div>
               <input
                 type="text"
                 required
                 className="input"
-                placeholder="VD: Cái, Lon, Hộp, Kg, Viên, Bó..."
+                placeholder="VD: Cái, Lon, Chai, Gói, Hộp, Kg..."
                 value={formData.unit}
                 onChange={(e) => setFormData({ ...formData, unit: e.target.value })}
               />
@@ -1136,7 +1312,7 @@ const Products = () => {
                       type="button"
                       key={u}
                       onClick={() => setFormData({ ...formData, unit: u })}
-                      className={`text-[10px] px-1.5 py-0.5 rounded font-medium transition-colors ${
+                      className={`text-[11px] px-2 py-0.5 rounded-lg font-semibold transition-colors ${
                         formData.unit === u 
                           ? 'bg-sky-500 text-white' 
                           : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200'
@@ -1174,156 +1350,33 @@ const Products = () => {
                 </div>
               )}
             </div>
-          </div>
 
-          {/* Row 3: Danh mục, Vị trí kệ, Nhà cung cấp ưu tiên */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <div>
-              <label className="label">Danh mục hàng hóa</label>
-              <select
-                className="input"
-                value={formData.categoryId}
-                onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
-              >
-                <option value="">-- Chưa phân danh mục --</option>
-                {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-              </select>
-            </div>
-
-            <div>
-              <label className="label">Vị trí kệ hàng</label>
-              <select
-                className="input"
-                value={formData.shelfId}
-                onChange={(e) => setFormData({ ...formData, shelfId: e.target.value })}
-              >
-                <option value="">-- Chưa xếp kệ --</option>
-                {shelves.map(s => (
-                  <option key={s.id} value={s.id}>
-                    {s.code ? `[${s.code}] ` : ''}{s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="label">Nhà cung cấp ưu tiên</label>
-              <select
-                className="input"
-                value={formData.supplierId}
-                onChange={(e) => setFormData({ ...formData, supplierId: e.target.value })}
-              >
-                <option value="">-- Chọn nhà cung cấp --</option>
-                {suppliers.map(s => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} {s.phone ? `(${s.phone})` : ''}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {/* Row 4: Giá cả & Mức tồn */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
-            <div>
-              <label className="label">Giá vốn (Giá nhập)</label>
-              <MoneyInput
-                value={formData.importPrice}
-                onChange={(val) => setFormData({ ...formData, importPrice: val })}
-              />
-            </div>
-
-            <div>
-              <label className="label">Giá bán lẻ *</label>
-              <MoneyInput
-                value={formData.salePrice}
-                onChange={(val) => setFormData({ ...formData, salePrice: val })}
-              />
-            </div>
-
-            <div>
-              <label className="label flex items-center justify-between">
-                <span>Giá bán sỉ</span>
-                <span className="text-[10px] text-indigo-600 font-bold bg-indigo-50 dark:bg-indigo-950/40 px-1.5 py-0.5 rounded">Đại lý</span>
-              </label>
-              <MoneyInput
-                value={formData.wholesalePrice}
-                onChange={(val) => setFormData({ ...formData, wholesalePrice: val })}
-              />
-            </div>
-
-            <div>
-              <label className="label">Tồn kho tối thiểu</label>
-              <input
-                type="number"
-                min="0"
-                className="input"
-                value={formData.minStock}
-                onChange={(e) => setFormData({ ...formData, minStock: Number(e.target.value) || 0 })}
-              />
-            </div>
-          </div>
-
-          {/* Profit Margin & Markup Preset Tool */}
-          <div className="bg-slate-50 dark:bg-[#151f33] p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-2.5">
-            <div className="flex items-center justify-between flex-wrap gap-2">
-              <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
-                <TrendingUp size={15} className="text-emerald-500" />
-                <span>Công cụ tính Tỷ suất Lợi nhuận (Margin)</span>
-              </div>
-              <div className="flex items-center gap-3 text-xs">
-                <div>
-                  <span className="text-slate-400">Lãi gộp: </span>
-                  <span className={`font-bold ${grossProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
-                    {grossProfit >= 0 ? `+${formatCurrency(grossProfit)}` : formatCurrency(grossProfit)}
-                  </span>
-                </div>
-                <div>
-                  <span className="text-slate-400">Biên độ: </span>
-                  <span className={`font-bold ${Number(profitMarginPercent) >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
-                    {Number(profitMarginPercent) >= 0 ? `+${profitMarginPercent}%` : `${profitMarginPercent}%`}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[11px] text-slate-400 font-medium mr-1 flex items-center gap-1">
-                <Sparkles size={11} className="text-amber-500" /> Đặt giá theo % lãi vốn:
-              </span>
-              {MARGIN_PRESETS.map((pct) => (
-                <button
-                  type="button"
-                  key={pct}
-                  onClick={() => applyMarginPreset(pct)}
-                  className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-emerald-400 dark:hover:border-emerald-500 hover:text-emerald-600 text-slate-700 dark:text-slate-200 transition-colors shadow-sm"
-                  title={`Tự động đặt giá bán lẻ với lợi nhuận +${pct}% so với giá vốn`}
-                >
-                  +{pct}%
-                </button>
-              ))}
-            </div>
-
-            {wsNum > 0 && (
-              <div className="text-[11px] text-slate-400 border-t border-slate-200/50 dark:border-slate-800/80 pt-2 flex items-center justify-between">
-                <span>Biên lợi nhuận bán sỉ đại lý:</span>
-                <span className={`font-semibold ${wsProfit >= 0 ? 'text-indigo-600 dark:text-indigo-400' : 'text-rose-500'}`}>
-                  {wsProfit >= 0 ? `+${formatCurrency(wsProfit)} (+${wsMarginPercent}%)` : `${formatCurrency(wsProfit)} (${wsMarginPercent}%)`}
-                </span>
+            {!editingId && (
+              <div className="sm:col-span-4">
+                <label className="label">Tồn kho hiện có ({formData.unit || 'Cái'})</label>
+                <input
+                  type="number"
+                  min="0"
+                  className="input font-bold text-emerald-600 dark:text-emerald-400"
+                  placeholder="0"
+                  value={formData.currentStock}
+                  onChange={(e) => setFormData({ ...formData, currentStock: Math.max(parseInt(e.target.value) || 0, 0) })}
+                />
+                <p className="text-[10px] text-slate-400 mt-1">Số lượng đang có sẵn trên quầy/kho</p>
               </div>
             )}
           </div>
 
-          {/* Section: Đơn vị tính quy đổi (Multi-UoM) */}
-          <div className="bg-slate-50 dark:bg-[#151f33] p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-3">
+          {/* BƯỚC 4: Quy cách đóng gói Bán Sỉ & Lẻ (Thùng, Lốc, Két, Bao...) */}
+          <div className="bg-slate-50 dark:bg-[#151f33] p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
                 <h4 className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
                   <Layers size={15} className="text-sky-500" />
-                  <span>Quy cách đóng gói & Đơn vị tính quy đổi (Thùng, Lốc, Vỉ, Bao...)</span>
+                  <span>Bán theo Thùng / Lốc / Bao (Tự động quy đổi tồn kho)</span>
                 </h4>
                 <p className="text-[11px] text-slate-400 mt-0.5">
-                  Đơn vị cơ bản (tồn kho): <strong className="text-sky-600 dark:text-sky-400">{formData.unit || 'Cái'}</strong>. Chọn mẫu ngành hàng hoặc thêm đơn vị lớn hơn để tự động quy đổi khi nhập/bán.
+                  ĐVT nhỏ nhất: <strong className="text-sky-600 dark:text-sky-400">{formData.unit || 'Cái'}</strong>. Bấm chọn nhanh bên dưới nếu có bán nguyên Lốc/Thùng.
                 </p>
               </div>
               <div className="flex items-center gap-1.5 flex-wrap">
@@ -1332,9 +1385,8 @@ const Products = () => {
                     type="button"
                     onClick={handleRecalcAllUnitsFromBase}
                     className="btn-secondary py-1 px-2.5 text-xs rounded-xl flex items-center gap-1 text-emerald-600 dark:text-emerald-400 font-bold"
-                    title="Tính lại giá lẻ & giá sỉ của tất cả ĐVT quy đổi = Giá gốc × Hệ số quy đổi"
                   >
-                    <RefreshCw size={13} /> Tính lại theo giá gốc
+                    <RefreshCw size={13} /> Tính lại giá
                   </button>
                 )}
                 <button
@@ -1342,43 +1394,42 @@ const Products = () => {
                   onClick={() => handleAddUnit('', 12)}
                   className="btn-secondary py-1 px-2.5 text-xs rounded-xl flex items-center gap-1 text-sky-600 dark:text-sky-400 font-bold"
                 >
-                  <Plus size={14} /> Thêm ĐVT quy đổi
+                  <Plus size={14} /> Thêm ĐVT
                 </button>
               </div>
             </div>
 
-            {/* Mẫu quy cách đóng gói 1 chạm theo ngành hàng */}
+            {/* Mẫu quy cách đóng gói 1 chạm */}
             <div className="bg-white/80 dark:bg-slate-900/50 p-2.5 rounded-xl border border-slate-200/70 dark:border-slate-800 space-y-2">
               <div className="flex items-center justify-between gap-2 flex-wrap">
                 <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 flex items-center gap-1">
-                  <Sparkles size={12} className="text-amber-500" /> Áp dụng nhanh mẫu quy cách theo ngành hàng:
+                  <Sparkles size={12} className="text-amber-500" /> Mẫu ngành hàng:
                 </span>
                 <select
-                  className="input py-1 px-2.5 text-xs w-full sm:w-auto sm:min-w-[280px] font-semibold"
+                  className="input py-1 px-2.5 text-xs w-full sm:w-auto sm:min-w-[260px] font-semibold"
                   value=""
                   onChange={(e) => {
                     const found = PACKAGING_PRESETS.find(p => p.id === e.target.value);
                     if (found) handleApplyPackagingPreset(found);
                   }}
                 >
-                  <option value="">-- Chọn mẫu đóng gói phổ biến (Tự điền ĐVT gốc + Quy đổi) --</option>
+                  <option value="">-- Chọn mẫu đóng gói (Bia, Nước ngọt, Sữa, Mì, Gạo...) --</option>
                   {PACKAGING_PRESETS.map(preset => (
                     <option key={preset.id} value={preset.id}>
-                      {preset.label} (ĐVT gốc: {preset.baseUnit})
+                      {preset.label} (Gốc: {preset.baseUnit})
                     </option>
                   ))}
                 </select>
               </div>
 
               <div className="flex items-center gap-1 flex-wrap pt-1 border-t border-slate-100 dark:border-slate-800/80">
-                <span className="text-[10px] text-slate-400 font-semibold mr-1">Thêm lẻ 1 chạm:</span>
+                <span className="text-[10px] text-slate-400 font-semibold mr-1">Chạm để thêm:</span>
                 {QUICK_SECONDARY_UNITS.map((qu) => (
                   <button
                     type="button"
                     key={`${qu.unitName}-${qu.conversionFactor}`}
                     onClick={() => handleQuickAddSecondaryUnit(qu)}
-                    className="text-[10px] px-2 py-0.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-sky-50 dark:hover:bg-sky-950/60 text-slate-600 dark:text-slate-300 hover:text-sky-600 dark:hover:text-sky-400 border border-transparent hover:border-sky-300 font-semibold transition-all"
-                    title={`Thêm nhanh 1 ${qu.unitName} = ${qu.conversionFactor} ${formData.unit || 'ĐVT'}`}
+                    className="text-[10px] px-2 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-sky-50 dark:hover:bg-sky-950/60 text-slate-700 dark:text-slate-300 hover:text-sky-600 border border-transparent hover:border-sky-300 font-bold transition-all"
                   >
                     + {qu.unitName} ({qu.conversionFactor})
                   </button>
@@ -1386,29 +1437,25 @@ const Products = () => {
               </div>
             </div>
 
-            {formData.units.length === 0 ? (
-              <div className="text-center py-3 border border-dashed border-slate-200 dark:border-slate-800 rounded-xl text-slate-400 text-xs">
-                Sản phẩm chỉ bán theo ĐVT cơ bản (<strong className="text-slate-600 dark:text-slate-300">{formData.unit || 'Cái'}</strong>). Chọn mẫu phía trên hoặc bấm &quot;Thêm ĐVT quy đổi&quot; nếu có bán theo Thùng, Lốc, Vỉ, Bao...
-              </div>
-            ) : (
+            {formData.units.length > 0 && (
               <div className="space-y-2">
                 {formData.units.map((u, idx) => (
-                  <div key={idx} className="p-3 bg-white dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-800 grid grid-cols-1 sm:grid-cols-12 gap-2.5 items-center">
-                    <div className="sm:col-span-3">
-                      <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Tên ĐVT quy đổi *</label>
+                  <div key={idx} className="p-3 bg-white dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-800 grid grid-cols-2 sm:grid-cols-12 gap-2.5 items-center">
+                    <div className="col-span-1 sm:col-span-2">
+                      <label className="text-[10px] font-bold text-slate-400 block mb-0.5">ĐVT lớn *</label>
                       <input
                         type="text"
                         required
-                        placeholder="VD: Thùng, Lốc, Vỉ, Bao"
+                        placeholder="Thùng, Lốc..."
                         className="input py-1 text-xs font-semibold"
                         value={u.unitName}
                         onChange={(e) => handleUpdateUnit(idx, 'unitName', e.target.value)}
                       />
                     </div>
 
-                    <div className="sm:col-span-2">
+                    <div className="col-span-1 sm:col-span-2">
                       <label className="text-[10px] font-bold text-slate-400 block mb-0.5">
-                        Quy đổi (= N {formData.unit || 'ĐVT'}) *
+                        = Mấy {formData.unit || 'ĐVT'} *
                       </label>
                       <input
                         type="number"
@@ -1420,18 +1467,7 @@ const Products = () => {
                       />
                     </div>
 
-                    <div className="sm:col-span-3">
-                      <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Mã vạch riêng (tùy chọn)</label>
-                      <input
-                        type="text"
-                        placeholder="Quét mã trên thùng/lốc..."
-                        className="input py-1 text-xs font-mono"
-                        value={u.barcode || ''}
-                        onChange={(e) => handleUpdateUnit(idx, 'barcode', e.target.value)}
-                      />
-                    </div>
-
-                    <div className="sm:col-span-2">
+                    <div className="col-span-1 sm:col-span-2">
                       <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Giá bán lẻ</label>
                       <MoneyInput
                         value={u.salePrice}
@@ -1439,22 +1475,40 @@ const Products = () => {
                       />
                     </div>
 
-                    <div className="sm:col-span-1">
-                      <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Giá sỉ</label>
+                    <div className="col-span-1 sm:col-span-2">
+                      <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Giá bán sỉ</label>
                       <MoneyInput
                         value={u.wholesalePrice}
                         onChange={(val) => handleUpdateUnit(idx, 'wholesalePrice', val)}
                       />
                     </div>
 
-                    <div className="sm:col-span-1 flex items-end justify-center pt-2 sm:pt-4">
+                    <div className="col-span-2 sm:col-span-4 flex items-end gap-1.5">
+                      <div className="flex-1">
+                        <label className="text-[10px] font-bold text-slate-400 block mb-0.5">Mã vạch thùng/lốc</label>
+                        <input
+                          type="text"
+                          placeholder="Tùy chọn..."
+                          className="input py-1 text-xs font-mono"
+                          value={u.barcode || ''}
+                          onChange={(e) => handleUpdateUnit(idx, 'barcode', e.target.value)}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setScannerTarget(idx)}
+                        className="p-2 rounded-xl bg-sky-50 dark:bg-sky-950/50 text-sky-600 border border-sky-200 dark:border-sky-800 hover:bg-sky-500 hover:text-white shrink-0"
+                        title="Quét mã vạch thùng/lốc bằng Camera"
+                      >
+                        <Camera size={14} />
+                      </button>
                       <button
                         type="button"
                         onClick={() => handleRemoveUnit(idx)}
-                        className="text-slate-400 hover:text-rose-500 p-1"
+                        className="p-2 text-slate-400 hover:text-rose-500 shrink-0"
                         title="Xóa đơn vị quy đổi"
                       >
-                        <Trash2 size={16} />
+                        <Trash2 size={15} />
                       </button>
                     </div>
                   </div>
@@ -1463,62 +1517,183 @@ const Products = () => {
             )}
           </div>
 
-          {/* Section: Quản lý Lô hàng & Hạn sử dụng (FEFO) */}
-          <div className="bg-slate-50 dark:bg-[#151f33] p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  className="rounded border-slate-300 text-amber-500 focus:ring-amber-400 w-4 h-4"
-                  checked={formData.hasExpiryDate}
-                  onChange={(e) => setFormData({ ...formData, hasExpiryDate: e.target.checked })}
-                />
-                <span className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
-                  <Clock size={15} className="text-amber-500" />
-                  Theo dõi Hạn sử dụng & Lô hàng (FEFO)
-                </span>
-              </label>
+          {/* NÚT MỞ RỘNG CÀI ĐẶT NÂNG CAO */}
+          <button
+            type="button"
+            onClick={() => setShowAdvancedForm(!showAdvancedForm)}
+            className="w-full py-2.5 px-4 rounded-xl border border-dashed border-slate-300 dark:border-slate-700 text-xs font-bold text-slate-600 dark:text-slate-300 hover:border-sky-400 hover:text-sky-600 flex items-center justify-between transition-colors bg-slate-50/50 dark:bg-slate-800/30"
+          >
+            <span>
+              {showAdvancedForm
+                ? 'Thu gọn cài đặt nâng cao'
+                : 'Mở rộng cài đặt nâng cao (Danh mục, Kệ hàng, Nhà cung cấp, Hạn sử dụng, Mã SKU...)'}
+            </span>
+            {showAdvancedForm ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
 
-              {formData.hasExpiryDate && (
-                <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-full">
-                  Xuất kho FEFO tự động
-                </span>
-              )}
-            </div>
-
-            {formData.hasExpiryDate && (
-              <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800/80 grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
+          {showAdvancedForm && (
+            <div className="space-y-4 pt-1 animate-fade-in">
+              {/* Danh mục, Kệ, Nhà cung cấp, SKU, Tồn tối thiểu */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
                 <div>
-                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                    Cảnh báo trước ngày hết hạn (ngày)
-                  </label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="365"
-                    className="input text-xs"
-                    value={formData.expiryWarningDays}
-                    onChange={(e) => setFormData({ ...formData, expiryWarningDays: Math.max(parseInt(e.target.value) || 30, 1) })}
-                  />
-                  <p className="text-[10px] text-slate-400 mt-1">
-                    Hệ thống sẽ gắn cờ cảnh báo trên màn hình kho và bảng điều khiển khi lô hàng còn dưới số ngày này.
-                  </p>
+                  <label className="label">Danh mục hàng hóa</label>
+                  <select
+                    className="input"
+                    value={formData.categoryId}
+                    onChange={(e) => setFormData({ ...formData, categoryId: e.target.value })}
+                  >
+                    <option value="">-- Chưa phân danh mục --</option>
+                    {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                  </select>
                 </div>
 
-                <div className="bg-amber-50 dark:bg-amber-950/30 p-3 rounded-xl border border-amber-200/60 dark:border-amber-800/40 text-[11px] text-amber-800 dark:text-amber-200 space-y-1">
-                  <p className="font-bold flex items-center gap-1">
-                    <AlertTriangle size={13} className="text-amber-500 shrink-0" />
-                    Quy tắc xuất kho FEFO (First Expired First Out):
-                  </p>
-                  <p className="text-[10px] leading-relaxed text-slate-600 dark:text-slate-300">
-                    Khi bán hàng tại quầy POS, hệ thống tự động trừ kho từ lô hàng có hạn sử dụng gần nhất trước, tránh thất thoát do hàng quá hạn.
-                  </p>
+                <div>
+                  <label className="label">Vị trí kệ hàng</label>
+                  <select
+                    className="input"
+                    value={formData.shelfId}
+                    onChange={(e) => setFormData({ ...formData, shelfId: e.target.value })}
+                  >
+                    <option value="">-- Chưa xếp kệ --</option>
+                    {shelves.map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.code ? `[${s.code}] ` : ''}{s.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="label">Nhà cung cấp ưu tiên</label>
+                  <select
+                    className="input"
+                    value={formData.supplierId}
+                    onChange={(e) => setFormData({ ...formData, supplierId: e.target.value })}
+                  >
+                    <option value="">-- Chọn nhà cung cấp --</option>
+                    {suppliers.map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.name} {s.phone ? `(${s.phone})` : ''}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
-            )}
-          </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                <div>
+                  <label className="label">Mã SKU nội bộ (Để trống sẽ tự tạo)</label>
+                  <input
+                    type="text"
+                    className="input font-mono uppercase font-bold"
+                    placeholder="Tự động tạo nếu để trống"
+                    value={formData.sku}
+                    onChange={(e) => setFormData({ ...formData, sku: e.target.value.toUpperCase() })}
+                  />
+                </div>
+                <div>
+                  <label className="label">Cảnh báo tồn kho tối thiểu ({formData.unit || 'Cái'})</label>
+                  <input
+                    type="number"
+                    min="0"
+                    className="input"
+                    value={formData.minStock}
+                    onChange={(e) => setFormData({ ...formData, minStock: Number(e.target.value) || 0 })}
+                  />
+                </div>
+              </div>
+
+              {/* Profit Margin & Markup Preset Tool */}
+              <div className="bg-slate-50 dark:bg-[#151f33] p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-2.5">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200">
+                    <TrendingUp size={15} className="text-emerald-500" />
+                    <span>Công cụ tính Tỷ suất Lợi nhuận (Margin)</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs">
+                    <div>
+                      <span className="text-slate-400">Lãi lẻ: </span>
+                      <span className={`font-bold ${grossProfit >= 0 ? 'text-emerald-600 dark:text-emerald-400' : 'text-rose-500'}`}>
+                        {grossProfit >= 0 ? `+${formatCurrency(grossProfit)} (+${profitMarginPercent}%)` : formatCurrency(grossProfit)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className="text-[11px] text-slate-400 font-medium mr-1 flex items-center gap-1">
+                    <Sparkles size={11} className="text-amber-500" /> Đặt giá lẻ theo % lãi vốn:
+                  </span>
+                  {MARGIN_PRESETS.map((pct) => (
+                    <button
+                      type="button"
+                      key={pct}
+                      onClick={() => applyMarginPreset(pct)}
+                      className="px-2.5 py-1 text-xs font-semibold rounded-lg bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 hover:border-emerald-400 text-slate-700 dark:text-slate-200 transition-colors shadow-sm"
+                    >
+                      +{pct}%
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Section: Quản lý Lô hàng & Hạn sử dụng (FEFO) */}
+              <div className="bg-slate-50 dark:bg-[#151f33] p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      className="rounded border-slate-300 text-amber-500 focus:ring-amber-400 w-4 h-4"
+                      checked={formData.hasExpiryDate}
+                      onChange={(e) => setFormData({ ...formData, hasExpiryDate: e.target.checked })}
+                    />
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-100 flex items-center gap-1.5">
+                      <Clock size={15} className="text-amber-500" />
+                      Theo dõi Hạn sử dụng & Lô hàng (FEFO)
+                    </span>
+                  </label>
+                </div>
+
+                {formData.hasExpiryDate && (
+                  <div className="pt-2 border-t border-slate-200/60 dark:border-slate-800/80">
+                    <label className="text-xs font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                      Cảnh báo trước ngày hết hạn (số ngày)
+                    </label>
+                    <input
+                      type="number"
+                      min="1"
+                      max="365"
+                      className="input text-xs max-w-[180px]"
+                      value={formData.expiryWarningDays}
+                      onChange={(e) => setFormData({ ...formData, expiryWarningDays: Math.max(parseInt(e.target.value) || 30, 1) })}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </form>
       </Modal>
+
+      {/* Camera Scanner cho việc tạo/sửa mã vạch sản phẩm trên điện thoại */}
+      <CameraScanner
+        open={scannerTarget !== null}
+        onClose={() => setScannerTarget(null)}
+        onDetected={(code) => {
+          if (scannerTarget === 'main') {
+            setFormData((prev) => ({
+              ...prev,
+              barcode: code,
+              sku: prev.sku || `SP-${code.slice(-6).toUpperCase()}`
+            }));
+            toast.success(`Đã nhận mã vạch: ${code}`);
+          } else if (typeof scannerTarget === 'number') {
+            handleUpdateUnit(scannerTarget, 'barcode', code);
+            toast.success(`Đã nhận mã vạch ĐVT quy đổi: ${code}`);
+          }
+          setScannerTarget(null);
+        }}
+      />
 
       {/* Modal In tem mã vạch */}
       <Modal

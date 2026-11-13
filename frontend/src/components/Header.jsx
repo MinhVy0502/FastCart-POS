@@ -114,23 +114,23 @@ const Header = ({ sidebarOpen, setSidebarOpen }) => {
   };
 
   return (
-    <header className="flex items-center justify-between px-6 md:px-8 py-4 border-b border-slate-100 dark:border-slate-800/80 bg-white/90 dark:bg-[#0e1726]/90 backdrop-blur-md sticky top-0 z-30 transition-colors">
+    <header className="flex items-center justify-between px-3 sm:px-6 md:px-8 py-2.5 sm:py-3.5 border-b border-slate-100 dark:border-slate-800/80 bg-white/90 dark:bg-[#0e1726]/90 backdrop-blur-md sticky top-0 z-30 transition-colors">
       {/* Search Bar & Hamburger */}
-      <div className="flex-1 max-w-xl relative flex items-center gap-3">
+      <div className="flex-1 max-w-xl relative flex items-center gap-2 sm:gap-3">
         <button 
           onClick={() => setSidebarOpen(!sidebarOpen)}
-          className="p-2 -ml-2 text-slate-500 dark:text-slate-400 hover:text-sky-500 dark:hover:text-sky-400 hover:bg-sky-50 dark:hover:bg-slate-800 rounded-xl transition-colors"
+          className="p-2 -ml-1 text-slate-500 dark:text-slate-400 hover:text-sky-500 dark:hover:text-sky-400 hover:bg-sky-50 dark:hover:bg-slate-800 rounded-xl transition-colors"
           title="Thu gọn / Mở rộng menu"
         >
           <Menu size={22} />
         </button>
 
         <div className="relative flex-1" ref={searchRef}>
-          <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
+          <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={17} />
           <input 
             type="text" 
-            placeholder="Tìm sản phẩm, hóa đơn, khách hàng..." 
-            className="w-full bg-slate-50 dark:bg-[#151f33] border border-slate-200 dark:border-slate-700 rounded-full py-2.5 pl-11 pr-4 text-sm focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 transition-all text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
+            placeholder="Tìm SP, đơn hàng, khách..." 
+            className="w-full bg-slate-50 dark:bg-[#151f33] border border-slate-200 dark:border-slate-700 rounded-full py-2 pl-9 pr-3 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-sky-400/50 focus:border-sky-400 transition-all text-slate-700 dark:text-slate-200 placeholder:text-slate-400 dark:placeholder:text-slate-500"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             onFocus={() => { if (searchResults) setShowSearchDropdown(true); }}
@@ -237,20 +237,20 @@ const Header = ({ sidebarOpen, setSidebarOpen }) => {
       </div>
 
       {/* Action Buttons & Profile */}
-      <div className="flex items-center gap-3 ml-4">
+      <div className="flex items-center gap-1.5 sm:gap-2.5 ml-2 sm:ml-4 shrink-0">
         {/* Dark Mode Toggle */}
         <button
           onClick={toggleTheme}
-          className="p-2.5 text-slate-500 dark:text-slate-400 hover:text-amber-500 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+          className="p-2 text-slate-500 dark:text-slate-400 hover:text-amber-500 dark:hover:text-amber-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
           title={dark ? 'Chuyển giao diện sáng' : 'Chuyển giao diện tối'}
         >
-          {dark ? <Sun size={19} className="text-amber-400" /> : <Moon size={19} />}
+          {dark ? <Sun size={18} className="text-amber-400" /> : <Moon size={18} />}
         </button>
 
         {/* Global Barcode Scanner */}
         <button 
           onClick={() => setShowScanner(true)}
-          className="flex items-center gap-2 bg-sky-400 hover:bg-sky-500 text-white px-4 py-2.5 rounded-full text-sm font-medium transition-colors shadow-sm shadow-sky-400/25"
+          className="flex items-center gap-1.5 bg-sky-400 hover:bg-sky-500 text-white px-3 sm:px-4 py-2 rounded-full text-xs sm:text-sm font-bold transition-colors shadow-sm shadow-sky-400/25"
           title="Quét mã vạch Camera"
         >
           <ScanBarcode size={18} />

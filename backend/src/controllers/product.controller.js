@@ -189,7 +189,10 @@ exports.create = async (req, res, next) => {
   const transaction = await sequelize.transaction();
   try {
     const data = pickFields(req.body);
-    if (!data.sku || !data.name) throw new AppError('Mã SKU và tên sản phẩm là bắt buộc');
+    if (!data.name) throw new AppError('Tên sản phẩm là bắt buộc');
+    if (!data.sku) {
+      data.sku = `SP${Date.now().toString().slice(-6)}${Math.floor(Math.random() * 90 + 10)}`;
+    }
     await ensureCategory(req.user.id, data.categoryId, transaction);
     await ensureShelf(req.user.id, data.shelfId, transaction);
     await ensureSupplier(req.user.id, data.supplierId, transaction);
@@ -202,7 +205,18 @@ exports.create = async (req, res, next) => {
       if (existingBarcode) throw new AppError('Mã vạch (Barcode) đã được dùng cho sản phẩm khác');
     }
 
-    const product = await Product.create({ ...data, userId: req.user.id }, { transaction });
+    const initialStock = Math.max(parseInt(req.body.currentStock) || 0, 0);
+    const product = await Product.create({ ...data, currentStock: initialStock, userId: req.user.id }, { transaction });
+
+    if (initialStock > 0) {
+      await InventoryTransaction.create({
+        productId: product.id,
+        type: 'ADJUST',
+        quantity: initialStock,
+        referenceCode: 'INIT',
+        note: 'Tồn kho ban đầu khi tạo sản phẩm'
+      }, { transaction });
+    }
 
     // Lưu các đơn vị quy đổi nếu có
     await syncProductUnits(product.id, req.user.id, req.body.units, transaction);

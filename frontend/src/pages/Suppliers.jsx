@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Building2, Plus, Search, Edit2, Trash2, Phone, Mail, MapPin, 
-  Truck, History, DollarSign, CreditCard, ArrowUpRight, ArrowDownLeft 
+  Truck, History, DollarSign, CreditCard, ArrowUpRight, ArrowDownLeft, Users 
 } from 'lucide-react';
 import api from '../services/api';
 import { useToast } from '../contexts/ToastContext';
@@ -10,6 +11,7 @@ import { formatCurrency, formatDate, getErrorMessage } from '../utils/format';
 
 const Suppliers = () => {
   const { toast, confirm } = useToast();
+  const navigate = useNavigate();
   const [suppliers, setSuppliers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [pagination, setPagination] = useState(null);
@@ -162,7 +164,7 @@ const Suppliers = () => {
       <PageHeader
         icon={Building2}
         color="indigo"
-        title="Quản lý nhà cung cấp"
+        title="Nhà cung cấp & Nợ phải trả"
         subtitle="Quản lý đối tác cung ứng hàng hóa, theo dõi các đợt nhập hàng và công nợ phải trả"
         actions={
           <button onClick={handleOpenCreate} className="btn-primary">
@@ -171,9 +173,27 @@ const Suppliers = () => {
         }
       />
 
-      <div className="card p-5 sm:p-6">
+      {/* Quick Switcher between Customer Receivable & Supplier Payable */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        <button
+          type="button"
+          onClick={() => navigate('/customers')}
+          className="px-4 py-2 rounded-2xl text-xs font-bold bg-white dark:bg-[#151f33] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-sky-400 flex items-center gap-1.5 shrink-0 transition-colors"
+        >
+          <Users size={15} className="text-sky-500" /> Khách hàng & Đại lý (Phải thu)
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/suppliers')}
+          className="px-4 py-2 rounded-2xl text-xs font-bold bg-indigo-600 text-white shadow-sm shadow-indigo-500/20 flex items-center gap-1.5 shrink-0"
+        >
+          <Building2 size={15} /> Nhà cung cấp (Nợ phải trả)
+        </button>
+      </div>
+
+      <div className="card p-4 sm:p-6">
         {/* Search & Filter */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center mb-6">
+        <div className="flex flex-col sm:flex-row gap-3 justify-between items-start sm:items-center mb-4">
           <div className="relative w-full sm:max-w-md">
             <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400" size={18} />
             <input
@@ -186,11 +206,11 @@ const Suppliers = () => {
           </div>
 
           <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
-            <div className="bg-slate-100 p-1 rounded-xl flex items-center text-xs font-semibold">
+            <div className="bg-slate-100 dark:bg-slate-800 p-1 rounded-xl flex items-center text-xs font-semibold">
               <button
                 type="button"
                 onClick={() => { setFilterDebt(false); setPage(1); }}
-                className={`px-3 py-1.5 rounded-lg transition-all ${!filterDebt ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                className={`px-3 py-1.5 rounded-lg transition-all ${!filterDebt ? 'bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
               >
                 Tất cả
               </button>
@@ -202,7 +222,7 @@ const Suppliers = () => {
                 <CreditCard size={13} /> Đang nợ NCC
               </button>
             </div>
-            <span className="text-xs text-slate-400 font-medium">
+            <span className="text-xs text-slate-400 font-medium hidden sm:inline">
               {pagination?.total ? `Tổng: ${pagination.total} đối tác` : ''}
             </span>
           </div>
@@ -223,103 +243,182 @@ const Suppliers = () => {
             }
           />
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse min-w-[780px]">
-              <thead>
-                <tr className="bg-slate-50/75 text-slate-500 text-xs uppercase tracking-wider">
-                  <th className="th">Nhà cung cấp</th>
-                  <th className="th">Liên hệ & Địa chỉ</th>
-                  <th className="th text-center">Đợt nhập</th>
-                  <th className="th text-right">Tổng tiền nhập</th>
-                  <th className="th text-right">Nợ cần trả NCC</th>
-                  <th className="th text-right">Thao tác</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 text-sm">
-                {suppliers.map((s) => {
-                  const debt = Number(s.currentDebt) || 0;
-                  return (
-                    <tr key={s.id} className="hover:bg-slate-50/70 transition-colors">
-                      <td className="td font-bold text-slate-800">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm shrink-0">
-                            {s.name.substring(0, 2).toUpperCase()}
-                          </div>
-                          <div>
-                            <p className="font-semibold text-slate-800">{s.name}</p>
-                            {s.email && <p className="text-xs text-slate-400 flex items-center gap-1"><Mail size={12} /> {s.email}</p>}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="td text-slate-600 text-xs">
-                        <div className="space-y-1">
+          <>
+            {/* Mobile Card List (< 768px) */}
+            <div className="md:hidden space-y-2.5">
+              {suppliers.map((s) => {
+                const debt = Number(s.currentDebt) || 0;
+                return (
+                  <div
+                    key={s.id}
+                    onClick={() => handleViewHistory(s, debt > 0 ? 'debts' : 'purchases')}
+                    className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700/80 bg-slate-50/60 dark:bg-slate-800/40 space-y-2.5 active:scale-[0.99] transition-all cursor-pointer"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-slate-800 dark:text-slate-100 text-sm">{s.name}</h4>
+                        <div className="flex items-center gap-3 mt-1 text-xs text-slate-500" onClick={(e) => e.stopPropagation()}>
                           {s.phone ? (
-                            <span className="flex items-center gap-1.5 font-medium text-slate-700">
-                              <Phone size={13} className="text-slate-400" /> {s.phone}
-                            </span>
+                            <a href={`tel:${s.phone}`} className="inline-flex items-center gap-1 font-semibold text-indigo-600 hover:underline">
+                              <Phone size={12} /> {s.phone}
+                            </a>
                           ) : (
-                            <span className="text-slate-300 italic">Chưa có SĐT</span>
+                            <span className="text-slate-400 italic text-[11px]">Chưa có SĐT</span>
                           )}
                           {s.address && (
-                            <span className="flex items-center gap-1 text-slate-500 truncate max-w-xs" title={s.address}>
-                              <MapPin size={12} className="text-slate-400 shrink-0" /> {s.address}
-                            </span>
+                            <span className="truncate max-w-[160px] text-[11px] text-slate-400">· {s.address}</span>
                           )}
                         </div>
-                      </td>
-                      <td className="td text-center">
-                        <span className="chip bg-indigo-50 text-indigo-600 font-bold">
-                          {s.purchaseCount || 0} lần
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <span className="text-[10px] text-slate-400 block">Nợ cần trả NCC</span>
+                        <span className={`font-black text-base ${debt > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                          {debt > 0 ? formatCurrency(debt) : '0₫'}
                         </span>
-                      </td>
-                      <td className="td text-right font-bold text-slate-800">
-                        {formatCurrency(s.totalPurchased || 0)}
-                      </td>
-                      <td className="td text-right">
-                        {debt > 0 ? (
-                          <span className="font-black text-rose-600 text-sm">{formatCurrency(debt)}</span>
-                        ) : (
-                          <span className="text-xs text-slate-400">0₫ (Đã tất toán)</span>
-                        )}
-                      </td>
-                      <td className="td text-right space-x-1">
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between pt-2 border-t border-slate-200/70 dark:border-slate-700/60" onClick={(e) => e.stopPropagation()}>
+                      <span className="text-[11px] text-slate-400">
+                        Đã nhập: <b className="text-slate-700 dark:text-slate-200">{formatCurrency(s.totalPurchased || 0)}</b> ({s.purchaseCount || 0} đợt)
+                      </span>
+                      <div className="flex items-center gap-1.5">
                         {debt > 0 && (
                           <button
                             onClick={() => handleOpenPayDebt(s)}
-                            className="btn-sm bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 inline-flex items-center gap-1 font-bold text-xs px-2.5 py-1.5 rounded-xl transition-all"
-                            title="Thanh toán nợ cho Nhà cung cấp"
+                            className="px-3 py-1.5 rounded-xl bg-emerald-500 text-white font-bold text-xs flex items-center gap-1 shadow-sm shadow-emerald-500/20"
                           >
-                            <DollarSign size={14} /> Trả nợ
+                            <DollarSign size={13} /> Trả nợ
                           </button>
                         )}
                         <button
                           onClick={() => handleViewHistory(s, debt > 0 ? 'debts' : 'purchases')}
-                          className="icon-btn text-indigo-500 hover:bg-indigo-50"
-                          title="Xem lịch sử nhập hàng & sổ nợ NCC"
+                          className="icon-btn text-indigo-500 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                          title="Sổ nợ & Lịch sử nhập"
                         >
-                          <History size={17} />
+                          <History size={15} />
                         </button>
                         <button
                           onClick={() => handleOpenEdit(s)}
-                          className="icon-btn text-amber-500 hover:bg-amber-50"
-                          title="Chỉnh sửa"
+                          className="icon-btn text-amber-500 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                          title="Sửa"
                         >
-                          <Edit2 size={17} />
+                          <Edit2 size={15} />
                         </button>
                         <button
                           onClick={() => handleDelete(s)}
-                          className="icon-btn text-rose-500 hover:bg-rose-50"
-                          title="Xóa nhà cung cấp"
+                          className="icon-btn text-rose-500 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700"
+                          title="Xóa"
                         >
-                          <Trash2 size={17} />
+                          <Trash2 size={15} />
                         </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Desktop Table (>= 768px) */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left border-collapse min-w-[780px]">
+                <thead>
+                  <tr className="bg-slate-50/75 text-slate-500 text-xs uppercase tracking-wider">
+                    <th className="th">Nhà cung cấp</th>
+                    <th className="th">Liên hệ & Địa chỉ</th>
+                    <th className="th text-center">Đợt nhập</th>
+                    <th className="th text-right">Tổng tiền nhập</th>
+                    <th className="th text-right">Nợ cần trả NCC</th>
+                    <th className="th text-right">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 text-sm">
+                  {suppliers.map((s) => {
+                    const debt = Number(s.currentDebt) || 0;
+                    return (
+                      <tr key={s.id} className="hover:bg-slate-50/70 transition-colors">
+                        <td className="td font-bold text-slate-800">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-600 flex items-center justify-center font-bold text-sm shrink-0">
+                              {s.name.substring(0, 2).toUpperCase()}
+                            </div>
+                            <div>
+                              <p className="font-semibold text-slate-800">{s.name}</p>
+                              {s.email && <p className="text-xs text-slate-400 flex items-center gap-1"><Mail size={12} /> {s.email}</p>}
+                            </div>
+                          </div>
+                        </td>
+                        <td className="td text-slate-600 text-xs">
+                          <div className="space-y-1">
+                            {s.phone ? (
+                              <a href={`tel:${s.phone}`} className="flex items-center gap-1.5 font-medium text-indigo-600 hover:underline">
+                                <Phone size={13} className="text-slate-400" /> {s.phone}
+                              </a>
+                            ) : (
+                              <span className="text-slate-300 italic">Chưa có SĐT</span>
+                            )}
+                            {s.address && (
+                              <span className="flex items-center gap-1 text-slate-500 truncate max-w-xs" title={s.address}>
+                                <MapPin size={12} className="text-slate-400 shrink-0" /> {s.address}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="td text-center">
+                          <span className="chip bg-indigo-50 text-indigo-600 font-bold">
+                            {s.purchaseCount || 0} lần
+                          </span>
+                        </td>
+                        <td className="td text-right font-bold text-slate-800">
+                          {formatCurrency(s.totalPurchased || 0)}
+                        </td>
+                        <td className="td text-right">
+                          {debt > 0 ? (
+                            <span className="font-black text-rose-600 text-sm">{formatCurrency(debt)}</span>
+                          ) : (
+                            <span className="text-xs text-slate-400">0₫ (Đã tất toán)</span>
+                          )}
+                        </td>
+                        <td className="td text-right space-x-1">
+                          {debt > 0 && (
+                            <button
+                              onClick={() => handleOpenPayDebt(s)}
+                              className="btn-sm bg-emerald-50 text-emerald-600 hover:bg-emerald-100 border border-emerald-200 inline-flex items-center gap-1 font-bold text-xs px-2.5 py-1.5 rounded-xl transition-all"
+                              title="Thanh toán nợ cho Nhà cung cấp"
+                            >
+                              <DollarSign size={14} /> Trả nợ
+                            </button>
+                          )}
+                          <button
+                            onClick={() => handleViewHistory(s, debt > 0 ? 'debts' : 'purchases')}
+                            className="icon-btn text-indigo-500 hover:bg-indigo-50"
+                            title="Xem lịch sử nhập hàng & sổ nợ NCC"
+                          >
+                            <History size={17} />
+                          </button>
+                          <button
+                            onClick={() => handleOpenEdit(s)}
+                            className="icon-btn text-amber-500 hover:bg-amber-50"
+                            title="Chỉnh sửa"
+                          >
+                            <Edit2 size={17} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(s)}
+                            className="icon-btn text-rose-500 hover:bg-rose-50"
+                            title="Xóa nhà cung cấp"
+                          >
+                            <Trash2 size={17} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
 
         <Pagination pagination={pagination} onChange={setPage} />

@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Layers, Plus, Edit2, Trash2, Search, Eye, 
-  Package, MapPin, CheckCircle2, Box, ArrowRight, ExternalLink 
+  Package, MapPin, CheckCircle2, Box, ArrowRight, ExternalLink, Warehouse, FolderTree 
 } from 'lucide-react';
 import api from '../services/api';
 import { useToast } from '../contexts/ToastContext';
@@ -146,6 +146,38 @@ const Shelves = () => {
           </button>
         }
       />
+
+      {/* Quick Navigation Pills for Mobile & Desktop */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1 scrollbar-hide">
+        <button
+          type="button"
+          onClick={() => navigate('/products')}
+          className="px-3.5 py-2 rounded-2xl text-xs font-bold bg-white dark:bg-[#151f33] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-sky-400 flex items-center gap-1.5 shrink-0 transition-colors"
+        >
+          <Package size={15} className="text-sky-500" /> Sản phẩm & Giá
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/inventory')}
+          className="px-3.5 py-2 rounded-2xl text-xs font-bold bg-white dark:bg-[#151f33] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-sky-400 flex items-center gap-1.5 shrink-0 transition-colors"
+        >
+          <Warehouse size={15} className="text-amber-500" /> Tồn kho & Kiểm kê
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/categories')}
+          className="px-3.5 py-2 rounded-2xl text-xs font-bold bg-white dark:bg-[#151f33] text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:border-sky-400 flex items-center gap-1.5 shrink-0 transition-colors"
+        >
+          <FolderTree size={15} className="text-indigo-500" /> Danh mục
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/shelves')}
+          className="px-3.5 py-2 rounded-2xl text-xs font-bold bg-emerald-600 text-white shadow-sm shadow-emerald-500/20 flex items-center gap-1.5 shrink-0"
+        >
+          <Layers size={15} /> Kệ hàng ({totalShelves})
+        </button>
+      </div>
 
       {/* Stats summary cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
