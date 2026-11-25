@@ -191,8 +191,9 @@ const Products = () => {
   const [saving, setSaving] = useState(false);
   const [copiedSku, setCopiedSku] = useState(false);
   const [showAllUnits, setShowAllUnits] = useState(false);
+  const [showUnitsSection, setShowUnitsSection] = useState(false);
   const [showAdvancedForm, setShowAdvancedForm] = useState(false);
-  const [scannerTarget, setScannerTarget] = useState(null); // null | 'main' | number (unit index)
+  const [scannerTarget, setScannerTarget] = useState(null); // null | 'quick_create' | 'main' | number (unit index)
 
   // Batch Management Modal state
   const [batchModalOpen, setBatchModalOpen] = useState(false);
@@ -278,9 +279,7 @@ const Products = () => {
     const qSearch = params.get('search');
     
     if (action === 'create' && sku) {
-      setFormData(prev => ({ ...prev, sku: sku.toUpperCase(), barcode: sku }));
-      setEditingId(null);
-      setShowModal(true);
+      openModal(null, sku);
       navigate('/products', { replace: true });
     } else if (qSearch !== null) {
       setSearchTerm(qSearch);
@@ -288,7 +287,7 @@ const Products = () => {
     }
   }, [location.search, navigate]);
 
-  const openModal = (product = null) => {
+  const openModal = (product = null, prefillBarcode = '') => {
     if (product) {
       setEditingId(product.id);
       setFormData({
@@ -315,12 +314,13 @@ const Products = () => {
           wholesalePrice: Number(u.wholesalePrice) || 0
         }))
       });
+      setShowUnitsSection(Boolean(product.units && product.units.length > 0));
       setShowAdvancedForm(Boolean(product.categoryId || product.shelfId || product.supplierId || product.hasExpiryDate));
     } else {
       setEditingId(null);
       setFormData({
         sku: '',
-        barcode: '',
+        barcode: prefillBarcode || '',
         name: '',
         unit: 'Cái',
         categoryId: '',
@@ -335,6 +335,7 @@ const Products = () => {
         expiryWarningDays: 30,
         units: []
       });
+      setShowUnitsSection(false);
       setShowAdvancedForm(false);
     }
     setShowModal(true);
@@ -537,8 +538,26 @@ const Products = () => {
     setTimeout(() => setCopiedSku(false), 1500);
   };
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
+  const handleQuickScanForProduct = async (code) => {
+    const clean = String(code || '').trim();
+    if (!clean) return;
+    setScannerTarget(null);
+    try {
+      const res = await api.get(`/products/sku/${encodeURIComponent(clean)}`);
+      if (res.data?.data) {
+        toast.info(`Sản phẩm "${res.data.data.name}" đã có — mở để sửa nhanh`);
+        openModal(res.data.data);
+        return;
+      }
+    } catch {
+      // Not found -> open quick create modal with barcode prefilled
+    }
+    toast.success(`Đã nhận mã mới: ${clean}`);
+    openModal(null, clean);
+  };
+
+  const handleSubmit = async (e, scanNextAfter = false) => {
+    if (e && e.preventDefault) e.preventDefault();
     if (!formData.name.trim()) {
       return toast.warning('Tên sản phẩm là bắt buộc');
     }
@@ -586,6 +605,9 @@ const Products = () => {
       }
       closeModal();
       fetchProducts();
+      if (scanNextAfter) {
+        setTimeout(() => setScannerTarget('quick_create'), 150);
+      }
     } catch (err) {
       toast.error(getErrorMessage(err, 'Lưu sản phẩm thất bại'));
     } finally {
@@ -785,6 +807,14 @@ const Products = () => {
               title="Xuất danh sách ra file Excel"
             >
               <Download size={16} /> <span className="hidden sm:inline">Xuất</span> Excel
+            </button>
+            <button
+              type="button"
+              onClick={() => setScannerTarget('quick_create')}
+              className="btn-secondary bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 border-amber-200 dark:border-amber-800 hover:bg-amber-500 hover:text-white text-xs sm:text-sm font-bold"
+              title="Quét mã vạch bằng Camera để thêm hoặc cập nhật nhanh sản phẩm"
+            >
+              <Camera size={17} /> Quét mã thêm SP
             </button>
             <button onClick={() => openModal()} className="btn-primary">
               <Plus size={18} /> Thêm sản phẩm
@@ -1204,12 +1234,23 @@ const Products = () => {
         title={editingId ? 'Chỉnh sửa sản phẩm' : 'Thêm sản phẩm nhanh'}
         icon={<Package size={20} className="text-sky-500" />}
         footer={
-          <>
+          <div className="flex items-center justify-end gap-2 flex-wrap w-full">
             <button type="button" onClick={closeModal} className="btn-secondary">Hủy</button>
+            {!editingId && (
+              <button
+                type="button"
+                disabled={saving}
+                onClick={() => handleSubmit(null, true)}
+                className="btn-secondary text-amber-600 border-amber-200 bg-amber-50/70 hover:bg-amber-100 font-bold text-xs sm:text-sm"
+                title="Lưu sản phẩm này và mở Camera quét sản phẩm tiếp theo ngay"
+              >
+                <Camera size={16} /> Lưu & Quét tiếp
+              </button>
+            )}
             <button type="submit" form="product-form" disabled={saving} className="btn-primary">
-              {saving ? 'Đang lưu...' : (editingId ? 'Lưu thay đổi' : 'Thêm sản phẩm')}
+              {saving ? 'Đang lưu...' : (editingId ? 'Lưu thay đổi' : 'Lưu sản phẩm')}
             </button>
-          </>
+          </div>
         }
       >
         <form id="product-form" onSubmit={handleSubmit} className="space-y-4 max-h-[78vh] overflow-y-auto px-1 py-1">
@@ -1367,7 +1408,20 @@ const Products = () => {
             )}
           </div>
 
-          {/* BƯỚC 4: Quy cách đóng gói Bán Sỉ & Lẻ (Thùng, Lốc, Két, Bao...) */}
+          {/* BƯỚC 4: Quy cách đóng gói Bán Sỉ & Lẻ (Thu gọn mặc định để form thêm mới siêu nhanh) */}
+          {!showUnitsSection ? (
+            <button
+              type="button"
+              onClick={() => setShowUnitsSection(true)}
+              className="w-full py-2.5 px-4 rounded-xl border border-dashed border-sky-300 dark:border-sky-800 text-xs font-bold text-sky-600 dark:text-sky-400 hover:bg-sky-50/60 dark:hover:bg-sky-950/30 flex items-center justify-between transition-colors"
+            >
+              <span className="flex items-center gap-1.5">
+                <Layers size={15} />
+                + Bán thêm theo Thùng / Lốc / Bao (Tự quy đổi tồn kho)
+              </span>
+              <ChevronDown size={16} />
+            </button>
+          ) : (
           <div className="bg-slate-50 dark:bg-[#151f33] p-3.5 sm:p-4 rounded-2xl border border-slate-200/80 dark:border-slate-800 space-y-3">
             <div className="flex items-center justify-between flex-wrap gap-2">
               <div>
@@ -1395,6 +1449,14 @@ const Products = () => {
                   className="btn-secondary py-1 px-2.5 text-xs rounded-xl flex items-center gap-1 text-sky-600 dark:text-sky-400 font-bold"
                 >
                   <Plus size={14} /> Thêm ĐVT
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowUnitsSection(false)}
+                  className="p-1 text-slate-400 hover:text-slate-600"
+                  title="Thu gọn"
+                >
+                  <ChevronUp size={16} />
                 </button>
               </div>
             </div>
@@ -1516,6 +1578,7 @@ const Products = () => {
               </div>
             )}
           </div>
+          )}
 
           {/* NÚT MỞ RỘNG CÀI ĐẶT NÂNG CAO */}
           <button
@@ -1680,18 +1743,21 @@ const Products = () => {
         open={scannerTarget !== null}
         onClose={() => setScannerTarget(null)}
         onDetected={(code) => {
-          if (scannerTarget === 'main') {
+          if (scannerTarget === 'quick_create') {
+            handleQuickScanForProduct(code);
+          } else if (scannerTarget === 'main') {
             setFormData((prev) => ({
               ...prev,
               barcode: code,
               sku: prev.sku || `SP-${code.slice(-6).toUpperCase()}`
             }));
             toast.success(`Đã nhận mã vạch: ${code}`);
+            setScannerTarget(null);
           } else if (typeof scannerTarget === 'number') {
             handleUpdateUnit(scannerTarget, 'barcode', code);
             toast.success(`Đã nhận mã vạch ĐVT quy đổi: ${code}`);
+            setScannerTarget(null);
           }
-          setScannerTarget(null);
         }}
       />
 

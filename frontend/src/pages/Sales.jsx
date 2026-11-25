@@ -654,7 +654,15 @@ const Sales = () => {
       // not found
     }
 
-    toast.warning(`Không tìm thấy sản phẩm với mã: ${rawCode}`);
+    const wantCreate = await confirm({
+      title: 'Sản phẩm chưa có trong kho',
+      message: `Mã "${rawCode.trim()}" chưa có trong danh mục. Bạn có muốn thêm sản phẩm mới với mã này ngay không?`,
+      confirmText: 'Thêm sản phẩm mới',
+      cancelText: 'Đóng'
+    });
+    if (wantCreate) {
+      navigate(`/products?action=create&sku=${encodeURIComponent(rawCode.trim())}`);
+    }
   };
 
   const filteredCatalog = products.filter(p => {
